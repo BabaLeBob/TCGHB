@@ -839,7 +839,7 @@
                 applyCardEffect(currentOppCard, false);
             }
 
-            // 1. ONSAVE L'EFFET AVANT LA DESTRUCTION DE LA CARTE
+            // 1. SAUVEGARDE DE L'EFFET AVANT LA DESTRUCTION DE LA CARTE
             const myCardEffectType = currentMyCard.effect ? currentMyCard.effect.type : null;
             const oppCardEffectType = currentOppCard.effect ? currentOppCard.effect.type : null;
 
@@ -852,7 +852,7 @@
                 log(`⚡ <b>[${currentMyCard.name}]</b> utilise Foudre et frappe avant de subir les dégâts !`);
                 currentOppCard.hp -= currentMyCard.atk;
 
-                // Si l'adversaire surviv à la foudre, il riposte
+                // Si l'adversaire survit à la foudre, il riposte
                 if (currentOppCard.hp > 0) {
                     currentMyCard.hp -= currentOppCard.atk;
                 }
@@ -876,45 +876,55 @@
             const myDead = currentMyCard.hp <= 0;
             const oppDead = currentOppCard.hp <= 0;
 
-            if (myDead) {
-                if (isTheoreticianCard(currentMyCard)) {
-                    // On push une copie propre de la carte pour ne pas la perdre
-                    deadTheoreticians.push({ ...currentMyCard });
-                }
+            if (myDead && isTheoreticianCard(currentMyCard)) {
+                deadTheoreticians.push({ ...currentMyCard });
             }
 
-            if (oppDead) {
-                if (isTheoreticianCard(currentOppCard)) {
-                    deadTheoreticians.push({ ...currentOppCard });
-                }
+            if (oppDead && isTheoreticianCard(currentOppCard)) {
+                deadTheoreticians.push({ ...currentOppCard });
             }
 
+            // --- GESTION DES MORTS ET DU SCORE ---
             if (myDead && oppDead) {
                 log("💥 Les deux cartes sont détruites ! Aucun point.");
+                
+                // Traitement "Travail toujours" si les deux meurent
+                if (myCardEffectType === "ALWAYS_WORK") {
+                    selectedDeck.unshift({ ...currentMyCard }); // Remet sous le deck
+                    send('SEND_TO_BACK_DECK');
+                }
+                
                 currentMyCard = null;
                 currentOppCard = null;
                 myTurnActionSent = false;
                 oppTurnActionSent = false;
+
             } else if (myDead) {
                 if (myCardEffectType !== "ALWAYS_WORK") {
                     oppScore++;
                     log(`❌ Votre carte a été détruite ! +1 point pour l'adversaire.`);
-                    currentMyCard = null;
-                    myTurnActionSent = false;
                 } else {
-                    log(`📜 <b>Travail toujours :</b> Aucune attribution de point pour l'adversaire !`);
-                    send('SEND_TO_BACK_DECK'); // Ordonne à l'adversaire de remettre sa carte à la fin de son deck
+                    log(`📜 <b>Travail toujours :</b> Aucune attribution de point pour l'adversaire ! Carte renvoyée sous le deck.`);
+                    selectedDeck.unshift({ ...currentMyCard }); // Réinsère au fond du deck
+                    send('SEND_TO_BACK_DECK'); // Informe le réseau
                 }
+                
+                // DÉBLOCAGE OBLIGATOIRE DU JOUEUR (Empêche le jeu de geler)
+                currentMyCard = null;
+                myTurnActionSent = false;
+
             } else if (oppDead) {
                 if (oppCardEffectType !== "ALWAYS_WORK") {
                     myScore++;
                     log(`✅ Votre ${currentMyCard.name} a détruit la carte adverse ! +1 point.`);
-                    currentOppCard = null;
-                    oppTurnActionSent = false;
                 } else {
-                    log(`📜 <b>Travail toujours :</b> Vous ne marquez aucun point pour cette élimination !`);
-                    // L'adversaire exécutera lui-même le renvoi de ta carte quand il traitera sa propre mort de carte
+                    log(`📜 <b>Travail toujours :</b> L'adversaire évite la perte de point et réinsère sa carte !`);
                 }
+
+                // DÉBLOCAGE OBLIGATOIRE DE L'ADVERSAIRE
+                currentOppCard = null;
+                oppTurnActionSent = false;
+
             } else {
                 log("🛡️ Les deux cartes survivent ! Nouvel assaut imminent...");
                 updateUI();
@@ -922,22 +932,23 @@
                 return; 
             }
 
-            // Mise à jour du compteur global de morts
-            if (myDead) totalDeadCards++;
+            // Mise à jour des conteneurs globaux
             if (myDead) {
+                totalDeadCards++;
                 if (isApprenticeCard(currentMyCard)) {
                     myDeadApprentices++;
                 }
             }
-            if (myDead && isTheoreticianCard(currentMyCard)) {
-                deadTheoreticians.push(currentMyCard); }
-            if (oppDead) totalDeadCards++;
+            if (oppDead) {
+                totalDeadCards++;
+            }
 
-            // 2. ON VERIFIE L'EFFET AVEC LA VARIABLE SAUVEGARDÉE
+            // --- DECLENCHEMENT DES EFFETS SECONDAIRES À LA MORT ---
             if (myDead && myCardEffectType === "DISCUSSION") {
                 log(`💬 Discussion se déclenche à la mort de la carte !`);
                 send('REQUEST_NEXT_CARD');
             }
+
             // EFFET : Accueil
             if (myDead && myCardEffectType === "WELCOME") {
                 let buffedCount = 0;
@@ -954,6 +965,7 @@
                     log(`🏠 <b>Accueil</b> activé, mais aucun Apprenti.e dans le deck restant.`);
                 }
             }
+
             // EFFET : Bénéfice (pour le joueur)
             if (myDead && myCardEffectType === "BENEFIT") {
                 myScore++;
@@ -965,6 +977,7 @@
                 oppScore++;
                 log(`💰 <b>[Bénéfice]</b> La carte adverse est détruite mais lui rapporte +1 point !`);
             }
+
             // EFFET : Vengeance Chamanique (pour le joueur)
             if (myDead && myCardEffectType === "SHAMANIC_VENGEANCE") {
                 log(`⚡ <b>[Vengeance Chamanique]</b> Votre carte libère sa vengeance à sa mort !`);
@@ -972,7 +985,6 @@
                     currentOppCard.hp -= 20;
                     log(`🔥 La carte adverse subit 20 dégâts de vengeance ! (PV restants : ${currentOppCard.hp})`);
                     
-                    // On vérifie si la carte adverse meurt aussi suite à ces dégâts
                     if (currentOppCard.hp <= 0) {
                         myScore++;
                         log(`💥 La carte adverse succombe à la Vengeance Chamanique ! +1 point.`);
@@ -989,7 +1001,6 @@
                     currentMyCard.hp -= 20;
                     log(`🔥 Votre <b>[${currentMyCard.name}]</b> subit 20 dégâts de vengeance ! (PV restants : ${currentMyCard.hp})`);
                     
-                    // On vérifie si votre carte meurt aussi suite à ces dégâts
                     if (currentMyCard.hp <= 0) {
                         oppScore++;
                         log(`💥 Votre carte succombe à la Vengeance Chamanique adverse ! +1 point pour l'adversaire.`);
@@ -1031,6 +1042,7 @@
                     log(`🍄 <b>Champi'pote</b> adverse : À sa mort, votre carte [${currentMyCard.name}] perd toute son attaque (0 ATK) !`);
                 }
             }
+
             // EFFET : Crise budgétaire (pour le joueur)
             if (myDead && myCardEffectType === "BUDGET_CRISIS") {
                 log(`💸 <b>[Crise budgétaire]</b> Votre carte meurt et déclenche une crise chez l'adversaire !`);
@@ -1053,15 +1065,13 @@
             const myDeckEmpty = selectedDeck.length === 0 && !currentMyCard;
             const oppDeckEmpty = oppDeckCount === 0 && !currentOppCard;
 
-            // 1. Égalité si les deux atteignent 3 points en même temps OU si les deux n'ont plus de cartes avec le même score
+            // --- FENÊTRE DE FIN DE PARTIE ---
             if ((myScore >= 3 && oppScore >= 3) || (myDeckEmpty && oppDeckEmpty && myScore === oppScore)) {
                 showEndGameModal("ÉGALITÉ !", "Les deux joueurs se sont neutralisés !");
             } 
-            // 2. Victoire
             else if (myScore >= 3 || (oppDeckEmpty && myScore > oppScore)) {
                 showEndGameModal("VICTOIRE !", "Félicitations, vous avez remporté le combat !");
             } 
-            // 3. Défaite
             else if (oppScore >= 3 || (myDeckEmpty && myScore < oppScore)) {
                 showEndGameModal("DÉFAITE", "Vous avez perdu cette bataille.");
             }
