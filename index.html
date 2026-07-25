@@ -86,6 +86,15 @@
             <div>Adversaire: <span id="opp-score">0</span> pts (Cartes: <span id="opp-deck-count">0</span>)</div>
         </div>
 
+        <!-- Fenêtre d'effet : Discussion -->
+        <div id="discussion-modal" style="display:none; background:#1a1a24; border:2px solid #4e8cff; padding:15px; border-radius:8px; margin-top:15px;">
+            <h3>💬 Effet Discussion Activé !</h3>
+            <p>Prochaine carte de l'adversaire : <b id="opp-next-card-name" style="color:#ff5252;">???</b></p>
+            <p>Réorganisez vos cartes restantes avant de jouer :</p>
+            <div id="discussion-deck-container" class="cards-list"></div>
+            <button onclick="closeDiscussionModal()">OK / Valider l'ordre</button>
+        </div>
+
         <div class="battleboard">
             <div>
                 <h4>Votre carte</h4>
@@ -98,7 +107,7 @@
             </div>
         </div>
 
-        <button id="btn-next-round" onclick="triggerRound()" style="font-size: 18px;">⚔️ Révéler le prochain tour</button>
+        <button id="btn-next-round" onclick="triggerRound()" style="font-size: 18px;">⚔️ Jouer la prochaine carte</button>
 
         <div style="margin-top:20px;">
             <h4>Journal du combat :</h4>
@@ -116,9 +125,18 @@
         let myReady = false, oppReady = false;
         let currentMyCard = null, currentOppCard = null;
 
-        // Variables pour suivre l'effet "Appel à l'Aide" d'un tour à l'autre
+        // Suivi de l'état du tour
+        let myTurnActionSent = false;
+        let oppTurnActionSent = false;
+
+        // Variables pour l'effet "Appel à l'Aide"
         let myCallForHelpActive = false;
         let oppCallForHelpActive = false;
+        let myForgeActive = false;
+        let oppForgeActive = false;
+        let myFloralHealActive = false;
+        let oppFloralHealActive = false;
+        let myDiscussionTriggered = false;
 
         async function loadCardPool() {
             try {
@@ -175,21 +193,44 @@
                     oppReady = true;
                     checkBothReady();
                     break;
+
                 case 'PLAY_CARD':
                     currentOppCard = data.card;
                     oppDeckCount = data.remaining;
 
-                    // Vérification du bonus "Appel à l'Aide" pour la carte de l'adversaire
+                    // Application de l'Appel à l'Aide si applicable
                     if (oppCallForHelpActive) {
                         const cardName = currentOppCard.name.toLowerCase();
                         if (cardName.includes("mordret") || cardName.includes("tsuki")) {
                             currentOppCard.atk += 4;
                             log(`🔥 L'adversaire renforce <b>[${currentOppCard.name}]</b> avec l'Appel à l'Aide (+4 ATK) !`);
                         }
-                        oppCallForHelpActive = false; // L'effet est consommé
+                        oppCallForHelpActive = false;
                     }
-
+                    // CHECK EFFET "FORGE D'ARME" POUR L'ADVERSAIRE
+                    if (oppForgeActive) {
+                        currentOppCard.atk += 2;
+                        log(`⚔️ L'adversaire renforce <b>[${currentOppCard.name}]</b> avec la Forge d'arme (+2 ATK) !`);
+                        oppForgeActive = false;
+                    }
+                    // CHECK EFFET "SOIN FLORAL" POUR L'ADVERSAIRE
+                    if (oppFloralHealActive) {
+                        currentOppCard.hp += 2;
+                        log(`🌱 L'adversaire soigne <b>[${currentOppCard.name}]</b> avec le Soin Floral (+2 PV) !`);
+                        oppFloralHealActive = false;
+                    }
+                    oppTurnActionSent = true;
                     checkRoundResolution();
+                    break;
+                case 'REQUEST_NEXT_CARD':
+                    // L'adversaire demande à voir notre prochaine carte
+                    const nextCard = selectedDeck.length > 0 ? selectedDeck[0] : null;
+                    send('PEEK_NEXT_CARD', { card: nextCard });
+                    break;
+
+                case 'PEEK_NEXT_CARD':
+                    // On reçoit l'information sur la prochaine carte adverse
+                    showDiscussionInterface(data.card);
                     break;
             }
         }
@@ -289,39 +330,55 @@
             }
         }
 
+        // --- DEROULEMENT D'UN TOUR ---
         function triggerRound() {
-            if (currentMyCard || !selectedDeck.length) return;
+            if (myTurnActionSent || currentMyCard) return; // Si la carte est déjà en jeu, on ne repioche pas !
 
+            document.getElementById('btn-next-round').disabled = true;
+            myTurnActionSent = true;
+
+            if (selectedDeck.length === 0) return;
+            
             currentMyCard = selectedDeck.shift();
 
-            // Vérification du bonus "Appel à l'Aide" pour notre propre carte
+            // Appel à l'Aide
             if (myCallForHelpActive) {
                 const cardName = currentMyCard.name.toLowerCase();
                 if (cardName.includes("mordret") || cardName.includes("tsuki")) {
                     currentMyCard.atk += 4;
                     log(`🔥 <b>[${currentMyCard.name}]</b> bénéficie de l'Appel à l'Aide (+4 ATK) !`);
                 }
-                myCallForHelpActive = false; // L'effet est consommé
+                myCallForHelpActive = false;
+            }
+            // CHECK EFFET "FORGE D'ARME" POUR LE JOUEUR
+            if (myForgeActive) {
+                currentMyCard.atk += 2;
+                log(`⚔️ <b>[${currentMyCard.name}]</b> s'équipe de la Forge d'arme (+2 ATK) !`);
+                myForgeActive = false; // L'effet est consommé
+            }
+            // CHECK EFFET "SOIN FLORAL" POUR LE JOUEUR
+            if (myFloralHealActive) {
+                currentMyCard.hp += 2;
+                log(`🌱 <b>[${currentMyCard.name}]</b> bénéficie du Soin Floral (+2 PV) !`);
+                myFloralHealActive = false; // L'effet est consommé
             }
 
             send('PLAY_CARD', { card: currentMyCard, remaining: selectedDeck.length });
-            
-            document.getElementById('btn-next-round').disabled = true;
+
             checkRoundResolution();
         }
 
         function checkRoundResolution() {
             updateUI();
-            if (currentMyCard && currentOppCard) {
-                setTimeout(resolveCombat, 1000);
+            if (currentMyCard && currentOppCard && myTurnActionSent && oppTurnActionSent) {
+                setTimeout(resolveCombat, 800);
             }
         }
 
-        // --- SYSTEME D'ACTIVATION DES EFFETS ---
+        // --- EFFETS ---
         function applyCardEffect(card, isMyCard) {
             if (!card.effect || card.effect.type === "NONE") return;
 
-            // EFFET 1: CALL_FOR_HELP
             if (card.effect.type === "CALL_FOR_HELP") {
                 if (isMyCard) {
                     myCallForHelpActive = true;
@@ -331,15 +388,35 @@
                     log(`📢 L'adversaire active Appel à l'Aide !`);
                 }
             }
+            // EFFET : Forge d'arme
+            if (card.effect.type === "WEAPON_FORGE") {
+                if (isMyCard) {
+                    myForgeActive = true;
+                    log(`🔨 <b>[${card.name}]</b> forge une arme ! (+2 ATK pour votre prochaine carte)`);
+                } else {
+                    oppForgeActive = true;
+                    log(`🔨 L'adversaire active Forge d'arme !`);
+                }
+            }
+            // EFFET : Soin Floral
+            if (card.effect.type === "FLORAL_HEAL") {
+                if (isMyCard) {
+                    myFloralHealActive = true;
+                    log(`🌸 <b>[${card.name}]</b> diffuse un Soin Floral ! (+2 PV pour votre prochaine carte)`);
+                } else {
+                    oppFloralHealActive = true;
+                    log(`🌸 L'adversaire active Soin Floral !`);
+                }
+            }
         }
 
         function resolveCombat() {
-            log(`<b>${currentMyCard.name}</b> vs <b>${currentOppCard.name}</b>`);
+            log(`⚔️ <b>${currentMyCard.name}</b> s'attaque à <b>${currentOppCard.name}</b> !`);
 
             const myPrio = currentMyCard.effect ? currentMyCard.effect.priority : 1;
             const oppPrio = currentOppCard.effect ? currentOppCard.effect.priority : 1;
 
-            // Phase de déclenchement des effets selon la priorité (1 -> 2 -> 3)
+            // Phase de déclenchement des effets (priorité 1 -> 2 -> 3)
             if (myPrio < oppPrio) {
                 applyCardEffect(currentMyCard, true);
                 applyCardEffect(currentOppCard, false);
@@ -351,7 +428,7 @@
                 applyCardEffect(currentOppCard, false);
             }
 
-            // Calcul des dégâts simultanés
+            // Calcul des dégâts
             currentMyCard.hp -= currentOppCard.atk;
             currentOppCard.hp -= currentMyCard.atk;
 
@@ -362,26 +439,44 @@
                 log("💥 Les deux cartes sont détruites ! Aucun point.");
                 currentMyCard = null;
                 currentOppCard = null;
+                myTurnActionSent = false;
+                oppTurnActionSent = false;
             } else if (oppDead && !myDead) {
                 myScore++;
-                log(`✅ Votre ${currentMyCard.name} l'emporte ! +1 point.`);
-                currentOppCard = null;
+                log(`✅ Votre ${currentMyCard.name} a détruit la carte adverse ! +1 point.`);
+                currentOppCard = null; // La carte adverse meurt
+                oppTurnActionSent = false; // L'adversaire doit jouer sa carte suivante
             } else if (myDead && !oppDead) {
                 oppScore++;
-                log(`❌ Votre carte est détruite ! +1 point pour l'adversaire.`);
-                currentMyCard = null;
+                log(`❌ Votre carte a été détruite ! +1 point pour l'adversaire.`);
+                currentMyCard = null; // Notre carte meurt
+                myTurnActionSent = false; // On doit jouer notre carte suivante
             } else {
-                log("🛡️ Les deux cartes survivent pour le tour suivant !");
+                log("🛡️ Les deux cartes survivent ! Nouvel assaut imminent...");
+                updateUI();
+                // 🔄 CONTINUITÉ AUTOMATIQUE : Si les deux survivent, on relance la frappe après 1.5s
+                setTimeout(resolveCombat, 1500);
+                return; 
+            }
+
+            // Si ma carte est morte et qu'elle avait l'effet DISCUSSION :
+            if (myDead && currentMyCard.effect && currentMyCard.effect.type === "DISCUSSION") {
+                log(`💬 <b>[${currentMyCard.name}]</b> déclenche Discussion à sa mort !`);
+                send('REQUEST_NEXT_CARD'); // Demande à l'adversaire de montrer sa prochaine carte
             }
 
             updateUI();
 
+            // Gestion du bouton
+            if (!currentMyCard) {
+                document.getElementById('btn-next-round').disabled = false;
+            }
+
+            // Vérification des victoires / défaites
             if (myScore >= 3) alert("🎉 VICTOIRE !");
             else if (oppScore >= 3) alert("☠️ DEFAITE...");
             else if (selectedDeck.length === 0 && !currentMyCard && myScore < 3) alert("☠️ DEFAITE... Plus de cartes.");
             else if (oppDeckCount === 0 && !currentOppCard && oppScore < 3) alert("🎉 VICTOIRE ! L'adversaire n'a plus de cartes.");
-
-            document.getElementById('btn-next-round').disabled = false;
         }
 
         function renderCardHTML(c) {
@@ -411,6 +506,47 @@
             const logs = document.getElementById('logs');
             logs.innerHTML += `<div>• ${msg}</div>`;
             logs.scrollTop = logs.scrollHeight;
+        }
+
+        function showDiscussionInterface(oppCard) {
+            const modal = document.getElementById('discussion-modal');
+            const nameSpan = document.getElementById('opp-next-card-name');
+            
+            if (oppCard) {
+                nameSpan.innerText = `${oppCard.name} (⚔️ ${oppCard.atk} / ❤️ ${oppCard.hp})`;
+            } else {
+                nameSpan.innerText = "Aucune carte restante !";
+            }
+
+            renderDiscussionDeck();
+            modal.style.display = 'block';
+        }
+
+        function renderDiscussionDeck() {
+            const container = document.getElementById('discussion-deck-container');
+            container.innerHTML = '';
+
+            selectedDeck.forEach((c, index) => {
+                const isFirst = index === 0;
+                const isLast = index === selectedDeck.length - 1;
+
+                container.innerHTML += `
+                    <div class="card selected" style="width:110px; height:170px;">
+                        <div class="order-badge">#${index + 1}</div>
+                        <div class="name" style="font-size:11px;">${c.name}</div>
+                        <span class="atk" style="font-size:12px;">⚔️ ${c.atk}</span>
+                        <span class="hp" style="font-size:12px;">❤️ ${c.hp}</span>
+                        <div class="controls">
+                            <button class="btn-move" onclick="moveCardInDeck(${index}, -1); renderDiscussionDeck();" ${isFirst ? 'disabled' : ''}>⬅️</button>
+                            <button class="btn-move" onclick="moveCardInDeck(${index}, 1); renderDiscussionDeck();" ${isLast ? 'disabled' : ''}>➡️</button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function closeDiscussionModal() {
+            document.getElementById('discussion-modal').style.display = 'none';
         }
     </script>
 </body>
