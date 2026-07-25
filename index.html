@@ -226,24 +226,35 @@
         }
 
         function joinGame() {
+            const inputName = document.getElementById('username-input').value.trim();
+            if (inputName !== "") myUsername = inputName;
+
             const code = document.getElementById('join-code').value.trim();
-            if (input !== "") {
-                myUsername = input;
-            }
             if (!code) return alert("Veuillez entrer un code valide.");
-            document.getElementById('menu-status').innerText = "Connexion...";
+            
+            document.getElementById('menu-status').innerText = "Connexion en cours...";
+            
             peer = new Peer();
             peer.on('open', () => {
                 conn = peer.connect(code);
-                setupConnection();
+                
+                // Attendre l'ouverture effective du canal de communication
+                conn.on('open', () => {
+                    setupConnection();
+                });
+            });
+
+            peer.on('error', err => {
+                console.error(err);
+                document.getElementById('menu-status').innerText = "Erreur de connexion au code " + code;
             });
         }
 
         function setupConnection() {
-            conn.on('open', () => {
-                showScreen('screen-deck');
-                renderDeckBuilder();
-            });
+            send('PLAYER_INFO', { myName: myUsername });
+            showScreen('screen-deck');
+            renderDeckBuilder();
+
             conn.on('data', data => handleData(data));
         }
 
