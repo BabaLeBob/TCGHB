@@ -428,6 +428,9 @@
                 applyCardEffect(currentOppCard, false);
             }
 
+            // 1. ONSAVE L'EFFET AVANT LA DESTRUCTION DE LA CARTE
+            const myCardEffectType = currentMyCard.effect ? currentMyCard.effect.type : null;
+
             // Calcul des dégâts
             currentMyCard.hp -= currentOppCard.atk;
             currentOppCard.hp -= currentMyCard.atk;
@@ -444,25 +447,24 @@
             } else if (oppDead && !myDead) {
                 myScore++;
                 log(`✅ Votre ${currentMyCard.name} a détruit la carte adverse ! +1 point.`);
-                currentOppCard = null; // La carte adverse meurt
-                oppTurnActionSent = false; // L'adversaire doit jouer sa carte suivante
+                currentOppCard = null;
+                oppTurnActionSent = false;
             } else if (myDead && !oppDead) {
                 oppScore++;
                 log(`❌ Votre carte a été détruite ! +1 point pour l'adversaire.`);
-                currentMyCard = null; // Notre carte meurt
-                myTurnActionSent = false; // On doit jouer notre carte suivante
+                currentMyCard = null;
+                myTurnActionSent = false;
             } else {
                 log("🛡️ Les deux cartes survivent ! Nouvel assaut imminent...");
                 updateUI();
-                // 🔄 CONTINUITÉ AUTOMATIQUE : Si les deux survivent, on relance la frappe après 1.5s
                 setTimeout(resolveCombat, 1500);
                 return; 
             }
 
-            // Si ma carte est morte et qu'elle avait l'effet DISCUSSION :
-            if (myDead && currentMyCard.effect && currentMyCard.effect.type === "DISCUSSION") {
-                log(`💬 <b>[${currentMyCard.name}]</b> déclenche Discussion à sa mort !`);
-                send('REQUEST_NEXT_CARD'); // Demande à l'adversaire de montrer sa prochaine carte
+            // 2. ON VERIFIE L'EFFET AVEC LA VARIABLE SAUVEGARDÉE
+            if (myDead && myCardEffectType === "DISCUSSION") {
+                log(`💬 Discussion se déclenche à la mort de la carte !`);
+                send('REQUEST_NEXT_CARD');
             }
 
             updateUI();
@@ -478,7 +480,7 @@
             else if (selectedDeck.length === 0 && !currentMyCard && myScore < 3) alert("☠️ DEFAITE... Plus de cartes.");
             else if (oppDeckCount === 0 && !currentOppCard && oppScore < 3) alert("🎉 VICTOIRE ! L'adversaire n'a plus de cartes.");
         }
-
+        
         function renderCardHTML(c) {
             if (!c) return '<div style="color:#777; padding-top:70px;">Aucune carte</div>';
             return `
