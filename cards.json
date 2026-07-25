@@ -8,7 +8,7 @@
   { "id": 1.07, "name": "Cadet Bino", "atk": 3, "hp": 1 ,"effect": {"type": "DEADLY_GUILD","priority": 3,"description": "Si toutes vos cartes de départ sont des Confrères, gagne +5 PV."}},
   { "id": 1.08, "name": "Cadet Neloth", "atk": 2, "hp": 2 ,"effect": {"type": "GUILD_FORCE","priority": 3,"description": "Si votre prochaine carte est un Confrère, elle gagne +2 PV."}},
   { "id": 1.09, "name": "Diciple Mire Yonas", "atk": 2, "hp": 2 ,"effect": {"type": "CROC_CHAMPI","priority": 2,"description": "Annule définitivement l'effet de la carte adverse."}},
-  { "id": 1.10, "name": "Singe Diplome", "atk": 1, "hp": 1 ,"effect": {"type": "NONE","priority": 3,"description": "Aucun effet."}},
+  { "id": 1.10, "name": "Singe Diplome", "atk": 6, "hp": 1 ,"effect": {"type": "NONE","priority": 3,"description": "Aucun effet."}},
   { "id": 1.11, "name": "Monade Hermes", "atk": 1, "hp": 1 ,"effect": {"type": "PERFECT_SWAP","priority": 3,"description": "Échange la carte actuelle de votre adversaire avec sa dernière carte."}},
   { "id": 1.12, "name": "Mire Theo", "atk": 1, "hp": 3 ,"effect": {"type": "QUICK_HEAL","priority": 3,"description": "Votre prochaine carte gagne +2 PV."}},
   { "id": 1.13, "name": "Avidya Vainerii", "atk": 1, "hp": 1 ,"effect": {"type": "WITCH_POWER","priority": 3,"description": "La carte actuelle de l'adversaire perd 2 ATK pour toute la partie."}},

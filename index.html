@@ -154,9 +154,10 @@
         let deadTheoreticians = []; // Stocke les cartes Théoricien/ne éliminées
 
         function isTheoreticianCard(card) {
-            if (!card) return false;
+            if (!card || !card.name) return false;
             const name = card.name.toLowerCase();
-            return name.includes("theoricien") || name.includes("theoricienne") || name.includes("théororicien") || name.includes("théoricienne");
+            return name.includes("theoricien") || name.includes("théoriciens") || 
+                name.includes("theoricienne") || name.includes("théoricienne");
         }
 
         async function loadCardPool() {
@@ -359,6 +360,20 @@
                 case 'APPLY_BUDGET_CRISIS':
                     log(`💸 <b>Crise budgétaire !</b> Votre prochaine carte sera défaussée directement !`);
                     myBudgetCrisisActive = true;
+                    break;
+                case 'APPLY_FLAME_DEBUFF':
+                    
+                    // Réduction sur votre carte active sur le terrain
+                    if (currentMyCard) {
+                        currentMyCard.atk = Math.max(0, currentMyCard.atk - 2);
+                    }
+                    
+                    // Réduction sur toutes les cartes de votre deck
+                    selectedDeck.forEach(card => {
+                        card.atk = Math.max(0, card.atk - 2);
+                    });
+                    
+                    updateUI();
                     break;
             }
         }
@@ -566,6 +581,8 @@
         function applyCardEffect(card, isMyCard) {
             if (!card.effect || card.effect.type === "NONE") return;
 
+            if (card.hasTriggeredEffect) return;
+
             if (card.effect.type === "CALL_FOR_HELP") {
                 if (isMyCard) {
                     myCallForHelpActive = true;
@@ -685,20 +702,19 @@
                     log(`💖 L'adversaire lance Soin parfait ! (+${healBonus} PV basés sur ${totalDeadCards} carte(s) mortes)`);
                 }
             }
-            // EFFET : Flamme infinie
-            if (card.effect.type === "INFINITE_FLAME") {
+            if (card.effect.type === "INFINITE_FLAME" && !card.hasTriggeredEffect) {
                 if (isMyCard) {
-                    log(`🔥 <b>[${card.name}]</b> déchaîne la Flamme infinie ! Toutes les cartes adverses perdent 2 ATK.`);
+                    log(`🔥 <b>[${card.name}]</b> déchaîne la Flamme infinie ! Toutes les cartes de l'adversaire perdent 2 ATK.`);
                     
-                    // Réduit l'attaque de la carte adverse actuellement en jeu
+                    // 1. Réduction sur la carte adverse sur le terrain
                     if (currentOppCard) {
                         currentOppCard.atk = Math.max(0, currentOppCard.atk - 2);
                     }
                     
-                    // Envoie l'ordre à l'adversaire de réduire aussi tout son deck
+                    // 2. Ordre à l'adversaire de réduire l'ATK de TOUTES les cartes de son deck
                     send('APPLY_FLAME_DEBUFF');
                 } else {
-                    log(`🔥 L'adversaire déchaîne la Flamme infinie !`);
+                    log(`🔥 L'adversaire déchaîne la Flamme infinie sur vos cartes !`);
                 }
             }
             // EFFET : Apprentissage
@@ -737,6 +753,7 @@
                     log(`🛡️ L'adversaire active Bouclier lourd !`);
                 }
             }
+            card.hasTriggeredEffect = true;
         }
 
         function resolveCombat() {
