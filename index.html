@@ -22,26 +22,26 @@
 
         input { padding: 12px; font-size: 16px; border-radius: 6px; border: 1px solid #444; background: #1a1a24; color: white; text-align: center; }
 
-        /* Cartes & Grille */
+        /* Cartes */
         .cards-list { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin: 15px 0; min-height: 120px; }
         
-        .card { width: 120px; height: 180px; background: #33354a; border: 2px solid #4e8cff; border-radius: 8px; display: flex; flex-direction: column; justify-content: space-between; padding: 10px; position: relative; cursor: pointer; user-select: none; transition: transform 0.1s; }
+        .card { width: 130px; height: 210px; background: #33354a; border: 2px solid #4e8cff; border-radius: 8px; display: flex; flex-direction: column; justify-content: space-between; padding: 10px; position: relative; cursor: pointer; user-select: none; transition: transform 0.1s; }
         .card:hover { transform: translateY(-3px); }
         .card.selected { border-color: #4caf50; background: #2a3a30; }
 
         .card .order-badge { position: absolute; top: -10px; left: -10px; background: #4e8cff; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px; }
+        .card .prio-badge { position: absolute; top: -10px; right: -10px; background: #ff9800; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 11px; }
         .card .atk { color: #ff5252; font-weight: bold; font-size: 16px; text-align: left; }
         .card .hp { color: #4caf50; font-weight: bold; font-size: 16px; text-align: right; }
-        .card .name { font-weight: bold; font-size: 13px; margin: 10px 0; }
-        .card .controls { display: flex; justify-content: space-between; }
+        .card .name { font-weight: bold; font-size: 13px; margin: 5px 0; }
+        .card .effect-desc { font-size: 10px; color: #bbb; background: #1a1a24; padding: 4px; border-radius: 4px; min-height: 32px; display: flex; align-items: center; justify-content: center; }
+        .card .controls { display: flex; justify-content: space-between; margin-top: 5px; }
 
-        /* Zones de construction */
+        /* Zones */
         .deck-builder-section { background: #1a1a24; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-
-        /* Tapis de jeu */
-        .battleboard { display: flex; justify-content: space-around; align-items: center; margin: 30px 0; background: #1a1a24; padding: 20px; border-radius: 8px; min-height: 200px; }
+        .battleboard { display: flex; justify-content: space-around; align-items: center; margin: 30px 0; background: #1a1a24; padding: 20px; border-radius: 8px; min-height: 220px; }
         .scores { display: flex; justify-content: space-between; font-size: 18px; font-weight: bold; margin-bottom: 20px; background: #33354a; padding: 15px; border-radius: 8px; }
-        .log-box { background: #1a1a24; padding: 10px; border-radius: 6px; max-height: 120px; overflow-y: auto; font-size: 14px; text-align: left; color: #aaa; }
+        .log-box { background: #1a1a24; padding: 10px; border-radius: 6px; max-height: 140px; overflow-y: auto; font-size: 14px; text-align: left; color: #aaa; }
     </style>
 </head>
 <body>
@@ -63,17 +63,15 @@
     <!-- PREPARATION DU DECK -->
     <div id="screen-deck" class="screen">
         <h2>Composition du Deck</h2>
-        <p>Sélectionnez exactement 5 cartes dans votre collection, puis ajustez leur ordre de passage :</p>
+        <p>Sélectionnez exactement 5 cartes puis ajustez leur ordre de passage :</p>
 
-        <!-- Mon Deck Sélectionné -->
         <div class="deck-builder-section">
             <h3 style="margin-bottom: 5px;">Votre Deck (<span id="deck-count">0</span> / 5 cartes)</h3>
             <div id="my-deck-container" class="cards-list"></div>
         </div>
 
-        <!-- Collection Disponible -->
         <div class="deck-builder-section">
-            <h3 style="margin-bottom: 5px;">Collection disponible (Cliquez pour ajouter)</h3>
+            <h3 style="margin-bottom: 5px;">Collection disponible</h3>
             <div id="collection-container" class="cards-list"></div>
         </div>
         
@@ -109,8 +107,8 @@
     </div>
 
     <script>
-        let cardPool = []; // Chargé depuis cards.json
-        let selectedDeck = []; // Max 5 cartes choisies
+        let cardPool = [];
+        let selectedDeck = [];
         let oppDeckCount = 5;
         let myScore = 0;
         let oppScore = 0;
@@ -118,19 +116,16 @@
         let myReady = false, oppReady = false;
         let currentMyCard = null, currentOppCard = null;
 
-        // --- CHARGEMENT DU JSON ---
         async function loadCardPool() {
             try {
                 const response = await fetch('cards.json');
                 cardPool = await response.json();
             } catch (e) {
-                console.error("Erreur de chargement du fichier cards.json", e);
-                alert("Impossible de charger les cartes depuis cards.json. Assurez-vous que le fichier existe.");
+                console.error("Erreur de chargement de cards.json", e);
             }
         }
         loadCardPool();
 
-        // --- GESTION DU RESEAU ---
         function initPeer(callback) {
             peer = new Peer();
             peer.on('open', id => callback(id));
@@ -143,14 +138,14 @@
         function createGame() {
             document.getElementById('menu-status').innerText = "Création du salon en cours...";
             initPeer(id => {
-                document.getElementById('menu-status').innerHTML = `Salon créé ! Donnez ce code à votre ami :<br><b style="font-size:24px; color:#4e8cff;">${id}</b>`;
+                document.getElementById('menu-status').innerHTML = `Salon créé ! Code : <b style="font-size:24px; color:#4e8cff;">${id}</b>`;
             });
         }
 
         function joinGame() {
             const code = document.getElementById('join-code').value.trim();
             if (!code) return alert("Veuillez entrer un code valide.");
-            document.getElementById('menu-status').innerText = "Connexion à l'hôte...";
+            document.getElementById('menu-status').innerText = "Connexion...";
             peer = new Peer();
             peer.on('open', () => {
                 conn = peer.connect(code);
@@ -163,7 +158,6 @@
                 showScreen('screen-deck');
                 renderDeckBuilder();
             });
-
             conn.on('data', data => handleData(data));
         }
 
@@ -190,9 +184,8 @@
             document.getElementById(id).classList.add('active');
         }
 
-        // --- SELECTION ET ORDRE DU DECK ---
+        // --- AFFICHAGE DECK & EFFETS ---
         function renderDeckBuilder() {
-            // Rendre le deck sélectionné
             const deckContainer = document.getElementById('my-deck-container');
             deckContainer.innerHTML = '';
             
@@ -203,8 +196,10 @@
                 deckContainer.innerHTML += `
                     <div class="card selected">
                         <div class="order-badge">#${index + 1}</div>
+                        <div class="prio-badge" title="Priorité d'effet">P${c.effect ? c.effect.priority : 1}</div>
                         <span class="atk">⚔️ ${c.atk}</span>
                         <div class="name">${c.name}</div>
+                        <div class="effect-desc">${c.effect ? c.effect.description : 'Aucun effet.'}</div>
                         <span class="hp">❤️ ${c.hp}</span>
                         
                         <div class="controls">
@@ -216,35 +211,30 @@
                 `;
             });
 
-            // Rendre la collection
             const collectionContainer = document.getElementById('collection-container');
             collectionContainer.innerHTML = '';
 
             cardPool.forEach(c => {
-                // Compter combien de fois cette carte est déjà dans le deck
                 const isSelected = selectedDeck.some(item => item.id === c.id);
-
                 collectionContainer.innerHTML += `
                     <div class="card ${isSelected ? 'selected' : ''}" onclick="addToDeck(${c.id})">
+                        <div class="prio-badge" title="Priorité d'effet">P${c.effect ? c.effect.priority : 1}</div>
                         <span class="atk">⚔️ ${c.atk}</span>
                         <div class="name">${c.name}</div>
+                        <div class="effect-desc">${c.effect ? c.effect.description : 'Aucun effet.'}</div>
                         <span class="hp">❤️ ${c.hp}</span>
                     </div>
                 `;
             });
 
             document.getElementById('deck-count').innerText = selectedDeck.length;
-            
-            // Activer le bouton prêt seulement si exactement 5 cartes sont choisies
-            const btnReady = document.getElementById('btn-ready');
-            btnReady.disabled = selectedDeck.length !== 5 || myReady;
+            document.getElementById('btn-ready').disabled = selectedDeck.length !== 5 || myReady;
         }
 
         function addToDeck(cardId) {
             if (myReady || selectedDeck.length >= 5) return;
             const card = cardPool.find(c => c.id === cardId);
             if (card) {
-                // On crée une copie propre de la carte
                 selectedDeck.push(JSON.parse(JSON.stringify(card)));
                 renderDeckBuilder();
             }
@@ -260,11 +250,9 @@
             if (myReady) return;
             const newIndex = index + direction;
             if (newIndex < 0 || newIndex >= selectedDeck.length) return;
-
             const temp = selectedDeck[index];
             selectedDeck[index] = selectedDeck[newIndex];
             selectedDeck[newIndex] = temp;
-
             renderDeckBuilder();
         }
 
@@ -282,15 +270,14 @@
             if (myReady && oppReady) {
                 showScreen('screen-game');
                 updateUI();
-                log("Le combat commence ! Cliquez sur le bouton pour faire affronter vos premières cartes.");
+                log("Le combat commence !");
             }
         }
 
-        // --- DEROULEMENT DE LA PARTIE ---
         function triggerRound() {
             if (currentMyCard || !selectedDeck.length) return;
 
-            currentMyCard = selectedDeck.shift(); // Récupère la première carte
+            currentMyCard = selectedDeck.shift();
             send('PLAY_CARD', { card: currentMyCard, remaining: selectedDeck.length });
             
             document.getElementById('btn-next-round').disabled = true;
@@ -304,9 +291,34 @@
             }
         }
 
-        function resolveCombat() {
-            log(`<b>${currentMyCard.name}</b> (${currentMyCard.atk} ATK / ${currentMyCard.hp} PV) vs <b>${currentOppCard.name}</b> (${currentOppCard.atk} ATK / ${currentOppCard.hp} PV)`);
+        // --- MOTEUR D'EFFETS ET DE COMBAT ---
+        function applyCardEffect(card, target) {
+            if (!card.effect || card.effect.type === "NONE") return;
 
+            // TODO: C'est ici qu'on ajoutera les futurs effets personnalisés !
+            log(`✨ Effet de [${card.name}] (Priorité ${card.effect.priority}) s'active !`);
+        }
+
+        function resolveCombat() {
+            log(`<b>${currentMyCard.name}</b> vs <b>${currentOppCard.name}</b>`);
+
+            const myPrio = currentMyCard.effect ? currentMyCard.effect.priority : 1;
+            const oppPrio = currentOppCard.effect ? currentOppCard.effect.priority : 1;
+
+            // PHASE D'ACTIVATION DES EFFETS PAR PRIORITE (1 puis 2 puis 3)
+            if (myPrio < oppPrio) {
+                applyCardEffect(currentMyCard, currentOppCard);
+                applyCardEffect(currentOppCard, currentMyCard);
+            } else if (oppPrio < myPrio) {
+                applyCardEffect(currentOppCard, currentMyCard);
+                applyCardEffect(currentMyCard, currentOppCard);
+            } else {
+                // Même priorité = Effets simultanés
+                applyCardEffect(currentMyCard, currentOppCard);
+                applyCardEffect(currentOppCard, currentMyCard);
+            }
+
+            // RESOLUTION DU COMBAT CLASSIQUE
             currentMyCard.hp -= currentOppCard.atk;
             currentOppCard.hp -= currentMyCard.atk;
 
@@ -323,23 +335,18 @@
                 currentOppCard = null;
             } else if (myDead && !oppDead) {
                 oppScore++;
-                log(`❌ Votre carte est détruite ! L'adversaire marque +1 point.`);
+                log(`❌ Votre carte est détruite ! +1 point pour l'adversaire.`);
                 currentMyCard = null;
             } else {
-                log("🛡️ Les deux cartes survivent et continueront au prochain tour !");
+                log("🛡️ Les deux cartes survivent pour le tour suivant !");
             }
 
             updateUI();
 
-            if (myScore >= 3) {
-                alert("🎉 VICTOIRE ! Vous avez 3 points !");
-            } else if (oppScore >= 3) {
-                alert("☠️ DEFAITE... L'adversaire a 3 points.");
-            } else if (selectedDeck.length === 0 && !currentMyCard && myScore < 3) {
-                alert("☠️ DEFAITE... Plus de cartes en main.");
-            } else if (oppDeckCount === 0 && !currentOppCard && oppScore < 3) {
-                alert("🎉 VICTOIRE ! L'adversaire n'a plus de cartes.");
-            }
+            if (myScore >= 3) alert("🎉 VICTOIRE !");
+            else if (oppScore >= 3) alert("☠️ DEFAITE...");
+            else if (selectedDeck.length === 0 && !currentMyCard && myScore < 3) alert("☠️ DEFAITE... Plus de cartes.");
+            else if (oppDeckCount === 0 && !currentOppCard && oppScore < 3) alert("🎉 VICTOIRE ! L'adversaire n'a plus de cartes.");
 
             document.getElementById('btn-next-round').disabled = false;
         }
@@ -348,8 +355,10 @@
             if (!c) return '<div style="color:#777; padding-top:70px;">Aucune carte</div>';
             return `
                 <div class="card" style="margin: auto;">
+                    <div class="prio-badge" title="Priorité">P${c.effect ? c.effect.priority : 1}</div>
                     <span class="atk">⚔️ ${c.atk}</span>
                     <div class="name">${c.name}</div>
+                    <div class="effect-desc">${c.effect ? c.effect.description : 'Aucun effet.'}</div>
                     <span class="hp">❤️ ${c.hp}</span>
                 </div>
             `;
