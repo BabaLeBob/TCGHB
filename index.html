@@ -116,6 +116,10 @@
         let myReady = false, oppReady = false;
         let currentMyCard = null, currentOppCard = null;
 
+        // Variables pour suivre l'effet "Appel à l'Aide" d'un tour à l'autre
+        let myCallForHelpActive = false;
+        let oppCallForHelpActive = false;
+
         async function loadCardPool() {
             try {
                 const response = await fetch('cards.json');
@@ -174,6 +178,17 @@
                 case 'PLAY_CARD':
                     currentOppCard = data.card;
                     oppDeckCount = data.remaining;
+
+                    // Vérification du bonus "Appel à l'Aide" pour la carte de l'adversaire
+                    if (oppCallForHelpActive) {
+                        const cardName = currentOppCard.name.toLowerCase();
+                        if (cardName.includes("mordret") || cardName.includes("tsuki")) {
+                            currentOppCard.atk += 4;
+                            log(`🔥 L'adversaire renforce <b>[${currentOppCard.name}]</b> avec l'Appel à l'Aide (+4 ATK) !`);
+                        }
+                        oppCallForHelpActive = false; // L'effet est consommé
+                    }
+
                     checkRoundResolution();
                     break;
             }
@@ -278,6 +293,17 @@
             if (currentMyCard || !selectedDeck.length) return;
 
             currentMyCard = selectedDeck.shift();
+
+            // Vérification du bonus "Appel à l'Aide" pour notre propre carte
+            if (myCallForHelpActive) {
+                const cardName = currentMyCard.name.toLowerCase();
+                if (cardName.includes("mordret") || cardName.includes("tsuki")) {
+                    currentMyCard.atk += 4;
+                    log(`🔥 <b>[${currentMyCard.name}]</b> bénéficie de l'Appel à l'Aide (+4 ATK) !`);
+                }
+                myCallForHelpActive = false; // L'effet est consommé
+            }
+
             send('PLAY_CARD', { card: currentMyCard, remaining: selectedDeck.length });
             
             document.getElementById('btn-next-round').disabled = true;
@@ -291,12 +317,20 @@
             }
         }
 
-        // --- MOTEUR D'EFFETS ET DE COMBAT ---
-        function applyCardEffect(card, target) {
+        // --- SYSTEME D'ACTIVATION DES EFFETS ---
+        function applyCardEffect(card, isMyCard) {
             if (!card.effect || card.effect.type === "NONE") return;
 
-            // TODO: C'est ici qu'on ajoutera les futurs effets personnalisés !
-            log(`✨ Effet de [${card.name}] (Priorité ${card.effect.priority}) s'active !`);
+            // EFFET 1: CALL_FOR_HELP
+            if (card.effect.type === "CALL_FOR_HELP") {
+                if (isMyCard) {
+                    myCallForHelpActive = true;
+                    log(`📢 <b>[${card.name}]</b> active Appel à l'Aide ! (Bonus pour la prochaine carte Mordret/Tsuki)`);
+                } else {
+                    oppCallForHelpActive = true;
+                    log(`📢 L'adversaire active Appel à l'Aide !`);
+                }
+            }
         }
 
         function resolveCombat() {
@@ -305,20 +339,19 @@
             const myPrio = currentMyCard.effect ? currentMyCard.effect.priority : 1;
             const oppPrio = currentOppCard.effect ? currentOppCard.effect.priority : 1;
 
-            // PHASE D'ACTIVATION DES EFFETS PAR PRIORITE (1 puis 2 puis 3)
+            // Phase de déclenchement des effets selon la priorité (1 -> 2 -> 3)
             if (myPrio < oppPrio) {
-                applyCardEffect(currentMyCard, currentOppCard);
-                applyCardEffect(currentOppCard, currentMyCard);
+                applyCardEffect(currentMyCard, true);
+                applyCardEffect(currentOppCard, false);
             } else if (oppPrio < myPrio) {
-                applyCardEffect(currentOppCard, currentMyCard);
-                applyCardEffect(currentMyCard, currentOppCard);
+                applyCardEffect(currentOppCard, false);
+                applyCardEffect(currentMyCard, true);
             } else {
-                // Même priorité = Effets simultanés
-                applyCardEffect(currentMyCard, currentOppCard);
-                applyCardEffect(currentOppCard, currentMyCard);
+                applyCardEffect(currentMyCard, true);
+                applyCardEffect(currentOppCard, false);
             }
 
-            // RESOLUTION DU COMBAT CLASSIQUE
+            // Calcul des dégâts simultanés
             currentMyCard.hp -= currentOppCard.atk;
             currentOppCard.hp -= currentMyCard.atk;
 

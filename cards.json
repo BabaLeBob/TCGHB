@@ -1,5 +1,5 @@
 [
-  { "id": 1.01, "name": "Apprentie Iris", "atk": 1, "hp": 1 ,"effect": {"type": "NONE","priority": 3,"description": "Aucun effet."}},
+  { "id": 1.01, "name": "Apprentie Iris", "atk": 1, "hp": 1 ,"effect": {"type": "CALL_FOR_HELP","priority": 3,"description": "Si votre prochaine carte est 'Mordret' ou 'Tsuki', elle gagne +4 ATK."}},
   { "id": 1.02, "name": "Apprenti Mordret", "atk": 2, "hp": 2 ,"effect": {"type": "NONE","priority": 3,"description": "Aucun effet."}},
   { "id": 1.03, "name": "Apprenti Icenyr", "atk": 1, "hp": 3 ,"effect": {"type": "NONE","priority": 3,"description": "Aucun effet."}},
   { "id": 1.04, "name": "Dahladd Iora", "atk": 2, "hp": 1 ,"effect": {"type": "NONE","priority": 3,"description": "Aucun effet."}},
