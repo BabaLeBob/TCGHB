@@ -157,7 +157,8 @@
             if (!card || !card.name) return false;
             const name = card.name.toLowerCase();
             return name.includes("theoricien") || name.includes("théoriciens") || 
-                name.includes("theoricienne") || name.includes("théoricienne");
+                name.includes("theoricienne") || name.includes("théoricienne") || name.includes("Theoricien") || name.includes("Théoriciens") || 
+                name.includes("Theoricienne") || name.includes("Théoricienne");
         }
 
         async function loadCardPool() {
@@ -810,6 +811,19 @@
 
             const myDead = currentMyCard.hp <= 0;
             const oppDead = currentOppCard.hp <= 0;
+
+            if (myDead) {
+                if (isTheoreticianCard(currentMyCard)) {
+                    // On push une copie propre de la carte pour ne pas la perdre
+                    deadTheoreticians.push({ ...currentMyCard });
+                }
+            }
+
+            if (oppDead) {
+                if (isTheoreticianCard(currentOppCard)) {
+                    deadTheoreticians.push({ ...currentOppCard });
+                }
+            }
 
             if (myDead && oppDead) {
                 log("💥 Les deux cartes sont détruites ! Aucun point.");
