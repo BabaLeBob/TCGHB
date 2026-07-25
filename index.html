@@ -4,16 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TCG - Duel Tactique</title>
-    <!-- PeerJS pour la connexion multijoueur gratuite -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body { background: #1a1a24; color: white; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
         
-        .screen { display: none; width: 100%; max-width: 800px; background: #252634; padding: 25px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); text-align: center; }
+        .screen { display: none; width: 100%; max-width: 900px; background: #252634; padding: 25px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); text-align: center; }
         .active { display: block; }
 
-        h1, h2 { color: #4e8cff; margin-top: 0; }
+        h1, h2, h3 { color: #4e8cff; margin-top: 0; }
         button { background: #4e8cff; color: white; border: none; padding: 10px 18px; font-size: 15px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: 0.2s; margin: 4px; }
         button:hover { background: #3570e3; }
         button:disabled { background: #555; cursor: not-allowed; }
@@ -23,14 +22,21 @@
 
         input { padding: 12px; font-size: 16px; border-radius: 6px; border: 1px solid #444; background: #1a1a24; color: white; text-align: center; }
 
-        /* Cartes & Deck */
-        .cards-list { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin: 20px 0; }
-        .card { width: 120px; height: 190px; background: #33354a; border: 2px solid #4e8cff; border-radius: 8px; display: flex; flex-direction: column; justify-content: space-between; padding: 10px; position: relative; }
+        /* Cartes & Grille */
+        .cards-list { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin: 15px 0; min-height: 120px; }
+        
+        .card { width: 120px; height: 180px; background: #33354a; border: 2px solid #4e8cff; border-radius: 8px; display: flex; flex-direction: column; justify-content: space-between; padding: 10px; position: relative; cursor: pointer; user-select: none; transition: transform 0.1s; }
+        .card:hover { transform: translateY(-3px); }
+        .card.selected { border-color: #4caf50; background: #2a3a30; }
+
         .card .order-badge { position: absolute; top: -10px; left: -10px; background: #4e8cff; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px; }
         .card .atk { color: #ff5252; font-weight: bold; font-size: 16px; text-align: left; }
         .card .hp { color: #4caf50; font-weight: bold; font-size: 16px; text-align: right; }
-        .card .name { font-weight: bold; font-size: 14px; margin: 10px 0; }
+        .card .name { font-weight: bold; font-size: 13px; margin: 10px 0; }
         .card .controls { display: flex; justify-content: space-between; }
+
+        /* Zones de construction */
+        .deck-builder-section { background: #1a1a24; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
 
         /* Tapis de jeu */
         .battleboard { display: flex; justify-content: space-around; align-items: center; margin: 30px 0; background: #1a1a24; padding: 20px; border-radius: 8px; min-height: 200px; }
@@ -56,13 +62,22 @@
 
     <!-- PREPARATION DU DECK -->
     <div id="screen-deck" class="screen">
-        <h2>Préparation de votre Deck</h2>
-        <p>Organisez vos cartes dans l'ordre exact où elles seront jouées (de la 1ère à la 5ème) :</p>
+        <h2>Composition du Deck</h2>
+        <p>Sélectionnez exactement 5 cartes dans votre collection, puis ajustez leur ordre de passage :</p>
+
+        <!-- Mon Deck Sélectionné -->
+        <div class="deck-builder-section">
+            <h3 style="margin-bottom: 5px;">Votre Deck (<span id="deck-count">0</span> / 5 cartes)</h3>
+            <div id="my-deck-container" class="cards-list"></div>
+        </div>
+
+        <!-- Collection Disponible -->
+        <div class="deck-builder-section">
+            <h3 style="margin-bottom: 5px;">Collection disponible (Cliquez pour ajouter)</h3>
+            <div id="collection-container" class="cards-list"></div>
+        </div>
         
-        <div id="deck-container" class="cards-list"></div>
-        
-        <br>
-        <button id="btn-ready" onclick="playerReady()" style="font-size: 18px; padding: 12px 30px;">✅ Valider mon ordre et jouer !</button>
+        <button id="btn-ready" onclick="playerReady()" disabled style="font-size: 18px; padding: 12px 30px;">✅ Valider mon deck et jouer !</button>
         <p id="deck-status" style="color: #ffca28; font-weight: bold;"></p>
     </div>
 
@@ -94,22 +109,26 @@
     </div>
 
     <script>
-        // DECK DE BASE
-        const DEFAULT_CARDS = [
-            { name: "Dragon", atk: 4, hp: 6 },
-            { name: "Guerrier", atk: 3, hp: 4 },
-            { name: "Archer", atk: 5, hp: 2 },
-            { name: "Mage", atk: 6, hp: 3 },
-            { name: "Gobelin", atk: 2, hp: 2 }
-        ];
-
-        let myDeck = JSON.parse(JSON.stringify(DEFAULT_CARDS));
+        let cardPool = []; // Chargé depuis cards.json
+        let selectedDeck = []; // Max 5 cartes choisies
         let oppDeckCount = 5;
         let myScore = 0;
         let oppScore = 0;
         let peer, conn;
         let myReady = false, oppReady = false;
         let currentMyCard = null, currentOppCard = null;
+
+        // --- CHARGEMENT DU JSON ---
+        async function loadCardPool() {
+            try {
+                const response = await fetch('cards.json');
+                cardPool = await response.json();
+            } catch (e) {
+                console.error("Erreur de chargement du fichier cards.json", e);
+                alert("Impossible de charger les cartes depuis cards.json. Assurez-vous que le fichier existe.");
+            }
+        }
+        loadCardPool();
 
         // --- GESTION DU RESEAU ---
         function initPeer(callback) {
@@ -142,7 +161,7 @@
         function setupConnection() {
             conn.on('open', () => {
                 showScreen('screen-deck');
-                renderDeck();
+                renderDeckBuilder();
             });
 
             conn.on('data', data => handleData(data));
@@ -171,48 +190,90 @@
             document.getElementById(id).classList.add('active');
         }
 
-        // --- PREPARATION DU DECK AVEC FLECHES ---
-        function renderDeck() {
-            const container = document.getElementById('deck-container');
-            container.innerHTML = '';
-            myDeck.forEach((c, index) => {
+        // --- SELECTION ET ORDRE DU DECK ---
+        function renderDeckBuilder() {
+            // Rendre le deck sélectionné
+            const deckContainer = document.getElementById('my-deck-container');
+            deckContainer.innerHTML = '';
+            
+            selectedDeck.forEach((c, index) => {
                 const isFirst = index === 0;
-                const isLast = index === myDeck.length - 1;
+                const isLast = index === selectedDeck.length - 1;
 
-                container.innerHTML += `
-                    <div class="card">
+                deckContainer.innerHTML += `
+                    <div class="card selected">
                         <div class="order-badge">#${index + 1}</div>
                         <span class="atk">⚔️ ${c.atk}</span>
                         <div class="name">${c.name}</div>
                         <span class="hp">❤️ ${c.hp}</span>
                         
                         <div class="controls">
-                            <button class="btn-move" onclick="moveCard(${index}, -1)" ${isFirst || myReady ? 'disabled' : ''}>⬅️</button>
-                            <button class="btn-move" onclick="moveCard(${index}, 1)" ${isLast || myReady ? 'disabled' : ''}>➡️</button>
+                            <button class="btn-move" onclick="moveCardInDeck(${index}, -1)" ${isFirst || myReady ? 'disabled' : ''}>⬅️</button>
+                            <button class="btn-move" onclick="removeFromDeck(${index})" ${myReady ? 'disabled' : ''} style="background:#ff5252; color:white;">❌</button>
+                            <button class="btn-move" onclick="moveCardInDeck(${index}, 1)" ${isLast || myReady ? 'disabled' : ''}>➡️</button>
                         </div>
                     </div>
                 `;
             });
+
+            // Rendre la collection
+            const collectionContainer = document.getElementById('collection-container');
+            collectionContainer.innerHTML = '';
+
+            cardPool.forEach(c => {
+                // Compter combien de fois cette carte est déjà dans le deck
+                const isSelected = selectedDeck.some(item => item.id === c.id);
+
+                collectionContainer.innerHTML += `
+                    <div class="card ${isSelected ? 'selected' : ''}" onclick="addToDeck(${c.id})">
+                        <span class="atk">⚔️ ${c.atk}</span>
+                        <div class="name">${c.name}</div>
+                        <span class="hp">❤️ ${c.hp}</span>
+                    </div>
+                `;
+            });
+
+            document.getElementById('deck-count').innerText = selectedDeck.length;
+            
+            // Activer le bouton prêt seulement si exactement 5 cartes sont choisies
+            const btnReady = document.getElementById('btn-ready');
+            btnReady.disabled = selectedDeck.length !== 5 || myReady;
         }
 
-        function moveCard(index, direction) {
+        function addToDeck(cardId) {
+            if (myReady || selectedDeck.length >= 5) return;
+            const card = cardPool.find(c => c.id === cardId);
+            if (card) {
+                // On crée une copie propre de la carte
+                selectedDeck.push(JSON.parse(JSON.stringify(card)));
+                renderDeckBuilder();
+            }
+        }
+
+        function removeFromDeck(index) {
+            if (myReady) return;
+            selectedDeck.splice(index, 1);
+            renderDeckBuilder();
+        }
+
+        function moveCardInDeck(index, direction) {
             if (myReady) return;
             const newIndex = index + direction;
-            if (newIndex < 0 || newIndex >= myDeck.length) return;
+            if (newIndex < 0 || newIndex >= selectedDeck.length) return;
 
-            // Échange les deux cartes dans le tableau
-            const temp = myDeck[index];
-            myDeck[index] = myDeck[newIndex];
-            myDeck[newIndex] = temp;
+            const temp = selectedDeck[index];
+            selectedDeck[index] = selectedDeck[newIndex];
+            selectedDeck[newIndex] = temp;
 
-            renderDeck();
+            renderDeckBuilder();
         }
 
         function playerReady() {
+            if (selectedDeck.length !== 5) return;
             myReady = true;
             document.getElementById('btn-ready').disabled = true;
-            document.getElementById('deck-status').innerText = "Ordre verrouillé. En attente de l'adversaire...";
-            renderDeck(); // Re-rend les cartes pour désactiver les boutons
+            document.getElementById('deck-status').innerText = "Deck verrouillé. En attente de l'adversaire...";
+            renderDeckBuilder();
             send('READY');
             checkBothReady();
         }
@@ -227,10 +288,10 @@
 
         // --- DEROULEMENT DE LA PARTIE ---
         function triggerRound() {
-            if (currentMyCard || !myDeck.length) return;
+            if (currentMyCard || !selectedDeck.length) return;
 
-            currentMyCard = myDeck.shift(); // Prend la première carte
-            send('PLAY_CARD', { card: currentMyCard, remaining: myDeck.length });
+            currentMyCard = selectedDeck.shift(); // Récupère la première carte
+            send('PLAY_CARD', { card: currentMyCard, remaining: selectedDeck.length });
             
             document.getElementById('btn-next-round').disabled = true;
             checkRoundResolution();
@@ -270,12 +331,11 @@
 
             updateUI();
 
-            // Conditions de fin de partie
             if (myScore >= 3) {
                 alert("🎉 VICTOIRE ! Vous avez 3 points !");
             } else if (oppScore >= 3) {
                 alert("☠️ DEFAITE... L'adversaire a 3 points.");
-            } else if (myDeck.length === 0 && !currentMyCard && myScore < 3) {
+            } else if (selectedDeck.length === 0 && !currentMyCard && myScore < 3) {
                 alert("☠️ DEFAITE... Plus de cartes en main.");
             } else if (oppDeckCount === 0 && !currentOppCard && oppScore < 3) {
                 alert("🎉 VICTOIRE ! L'adversaire n'a plus de cartes.");
@@ -298,7 +358,7 @@
         function updateUI() {
             document.getElementById('my-score').innerText = myScore;
             document.getElementById('opp-score').innerText = oppScore;
-            document.getElementById('my-deck-count').innerText = myDeck.length;
+            document.getElementById('my-deck-count').innerText = selectedDeck.length;
             document.getElementById('opp-deck-count').innerText = oppDeckCount;
 
             document.getElementById('my-active-card').innerHTML = renderCardHTML(currentMyCard);

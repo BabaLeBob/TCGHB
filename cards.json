@@ -1,0 +1,12 @@
+[
+  { "id": 1, "name": "Dragon Rutilant", "atk": 5, "hp": 5 },
+  { "id": 2, "name": "Guerrier de Fer", "atk": 3, "hp": 5 },
+  { "id": 3, "name": "Archer Elfique", "atk": 4, "hp": 2 },
+  { "id": 4, "name": "Mage de Saphir", "atk": 6, "hp": 2 },
+  { "id": 5, "name": "Gobelin Furtif", "atk": 2, "hp": 2 },
+  { "id": 6, "name": "Titan de Pierre", "atk": 2, "hp": 8 },
+  { "id": 7, "name": "Assassin Ombrique", "atk": 7, "hp": 1 },
+  { "id": 8, "name": "Paladin Sacré", "atk": 4, "hp": 4 },
+  { "id": 9, "name": "Loup Enragé", "atk": 3, "hp": 3 },
+  { "id": 10, "name": "Phoenix Flamboyant", "atk": 5, "hp": 3 }
+]
