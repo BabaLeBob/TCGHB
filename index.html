@@ -153,13 +153,6 @@
 
         let deadTheoreticians = []; // Stocke les cartes Théoricien/ne éliminées
 
-        function isTheoreticianCard(card) {
-            if (!card || !card.name) return false;
-            const name = card.name.toLowerCase();
-            return name.includes("theoricien") || name.includes("théoriciens") || 
-                name.includes("theoricienne") || name.includes("théoricienne") || name.includes("Theoricien") || name.includes("Théoriciens") || 
-                name.includes("Theoricienne") || name.includes("Théoricienne");
-        }
 
         async function loadCardPool() {
             try {
@@ -1062,34 +1055,30 @@
         function closeDiscussionModal() {
             document.getElementById('discussion-modal').style.display = 'none';
         }
+
+        function hasTag(card, tag) {
+            if (!card || !card.tags || !Array.isArray(card.tags)) return false;
+            return card.tags.includes(tag);
+        }
+
+        function isTheoreticianCard(card) {
+            return hasTag(card, "THEORICIEN");
+        }
+
         // Fonction utilitaire pour tester si une carte est un Confrère
         function isGuildCard(card) {
             if (!card) return false;
-            const name = card.name.toLowerCase();
-            return name.includes("cadet") || 
-                name.includes("veilleur") || 
-                name.includes("aine") || 
-                name.includes("patriarque") || 
-                (card.effect && card.effect.type === "CONFRERE");
+  
+            return hasTag(card, "CONFRERE") || (card.effect && card.effect.type === "CONFRERE");
         }
         function isApprenticeCard(card) {
             if (!card) return false;
             const name = card.name.toLowerCase();
-            return name.includes("apprenti") || (card.effect && card.effect.type === "APPRENTI");
+            return hasTag(card, "APPRENTI") || (card.effect && card.effect.type === "APPRENTI");
         }
         function isProtectorCard(card) {
             if (!card) return false;
-            const name = card.name.toLowerCase();
-            const protectorKeywords = [
-                "ecuyer", "ecuyere", "chevalier", "chevaleresse", 
-                "haut-chevalier", "haut-chevaleresse", "sentinelle", 
-                "gardien", "gardienne"
-            ];
-            
-            const matchesName = protectorKeywords.some(keyword => name.includes(keyword));
-            const matchesEffect = card.effect && (card.effect.type === "PROTECTOR" || card.effect.type === "PROTECTEUR");
-            
-            return matchesName || matchesEffect;
+            return hasTag(card, "PROTECTEUR") || (card.effect && card.effect.type === "PROTECTEUR");
         }
         function selectTheoreticianEffect(masterCard) {
             // Création du texte de choix
