@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TCG - Duel Tactique</title>
+    <!-- On importe PeerJS pour la connexion multijoueur gratuite -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: #1a1a24; color: white; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        
+        .screen { display: none; width: 100%; max-width: 800px; background: #252634; padding: 25px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); text-align: center; }
+        .active { display: block; }
+
+        h1, h2 { color: #4e8cff; margin-top: 0; }
+        button { background: #4e8cff; color: white; border: none; padding: 12px 24px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: 0.2s; margin: 5px; }
+        button:hover { background: #3570e3; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        input { padding: 12px; font-size: 16px; border-radius: 6px; border: 1px solid #444; background: #1a1a24; color: white; text-align: center; }
+
+        /* Cartes & Deck */
+        .cards-list { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin: 20px 0; }
+        .card { width: 110px; height: 160px; background: #33354a; border: 2px solid #4e8cff; border-radius: 8px; display: flex; flex-direction: column; justify-content: space-between; padding: 10px; position: relative; }
+        .card .atk { color: #ff5252; font-weight: bold; font-size: 18px; text-align: left; }
+        .card .hp { color: #4caf50; font-weight: bold; font-size: 18px; text-align: right; }
+        .card .name { font-weight: bold; font-size: 14px; margin-top: 20px; }
+
+        /* Tapis de jeu */
+        .battleboard { display: flex; justify-content: space-around; align-items: center; margin: 30px 0; background: #1a1a24; padding: 20px; border-radius: 8px; min-height: 200px; }
+        .scores { display: flex; justify-content: space-between; font-size: 20px; font-weight: bold; margin-bottom: 20px; background: #33354a; padding: 15px; border-radius: 8px; }
+        .log-box { background: #1a1a24; padding: 10px; border-radius: 6px; max-height: 120px; overflow-y: auto; font-size: 14px; text-align: left; color: #aaa; }
+    </style>
+</head>
+<body>
+
+    <!-- MENU PRINCIPAL -->
+    <div id="screen-menu" class="screen active">
+        <h1>⚔️ TCG - Jeu de cartes ⚔️</h1>
+        <p>Affronte tes amis en duel dans un combat 5v5 automatisé !</p>
+        <br>
+        <button onclick="createGame()">Créer un salon</button>
+        <br><br>
+        <div>
+            <input type="text" id="join-code" placeholder="Entrer le Code de Salon">
+            <button onclick="joinGame()">Rejoindre</button>
+        </div>
+        <p id="menu-status" style="color: #ffca28; font-weight: bold; margin-top: 20px;"></p>
+    </div>
+
+    <!-- PREPARATION DU DECK -->
+    <div id="screen-deck" class="screen">
+        <h2>Préparation de votre Deck</h2>
+        <p>Voici vos 5 cartes. Modifiez l'ordre avant de valider !</p>
+        <div id="deck-container" class="cards-list"></div>
+        <button onclick="randomizeDeck()">🔀 Mélanger l'ordre</button>
+        <br><br>
+        <button id="btn-ready" onclick="playerReady()">✅ Prêt au combat !</button>
+        <p id="deck-status" style="color: #ffca28;"></p>
+    </div>
+
+    <!-- PLATEAU DE JEU -->
+    <div id="screen-game" class="screen">
+        <div class="scores">
+            <div>Vous: <span id="my-score">0</span> pts (Cartes restantes: <span id="my-deck-count">0</span>)</div>
+            <div>Adversaire: <span id="opp-score">0</span> pts (Cartes restantes: <span id="opp-deck-count">0</span>)</div>
+        </div>
+
+        <div class="battleboard">
+            <div>
+                <h4>Votre carte</h4>
+                <div id="my-active-card"></div>
+            </div>
+            <h2 style="color:#ff5252">VS</h2>
+            <div>
+                <h4>Carte Adversaire</h4>
+                <div id="opp-active-card"></div>
+            </div>
+        </div>
+
+        <button id="btn-next-round" onclick="triggerRound()">⚔️ Révéler le prochain tour</button>
+
+        <div style="margin-top:20px;">
+            <h4>Journal du combat :</h4>
+            <div id="logs" class="log-box"></div>
+        </div>
+    </div>
+
+    <script>
+        // CARTE BASE
+        const DEFAULT_CARDS = [
+            { name: "Dragon", atk: 4, hp: 6 },
+            { name: "Guerrier", atk: 3, hp: 4 },
+            { name: "Archer", atk: 5, hp: 2 },
+            { name: "Mage", atk: 6, hp: 3 },
+            { name: "Gobelin", atk: 2, hp: 2 }
+        ];
+
+        let myDeck = JSON.parse(JSON.stringify(DEFAULT_CARDS));
+        let oppDeckCount = 5;
+        let myScore = 0;
+        let oppScore = 0;
+        let isHost = false;
+        let peer, conn;
+        let myReady = false, oppReady = false;
+        let currentMyCard = null, currentOppCard = null;
+
+        // --- GESTION DU RESEAU (PeerJS) ---
+        function initPeer(callback) {
+            peer = new Peer();
+            peer.on('open', id => callback(id));
+            peer.on('connection', c => {
+                conn = c;
+                setupConnection();
+            });
+        }
+
+        function createGame() {
+            document.getElementById('menu-status').innerText = "Création du salon en cours...";
+            isHost = true;
+            initPeer(id => {
+                document.getElementById('menu-status').innerHTML = `Salon créé ! Donnez ce code à votre ami :<br><b style="font-size:24px; color:#4e8cff;">${id}</b>`;
+            });
+        }
+
+        function joinGame() {
+            const code = document.getElementById('join-code').value.trim();
+            if (!code) return alert("Veuillez entrer un code valide.");
+            document.getElementById('menu-status').innerText = "Connexion à l'hôte...";
+            isHost = false;
+            peer = new Peer();
+            peer.on('open', () => {
+                conn = peer.connect(code);
+                setupConnection();
+            });
+        }
+
+        function setupConnection() {
+            conn.on('open', () => {
+                showScreen('screen-deck');
+                renderDeck();
+            });
+
+            conn.on('data', data => handleData(data));
+        }
+
+        function send(type, payload = {}) {
+            if (conn) conn.send({ type, ...payload });
+        }
+
+        // --- GESTION DU RECEPTIONS DES MESSAGES ---
+        function handleData(data) {
+            switch (data.type) {
+                case 'READY':
+                    oppReady = true;
+                    checkBothReady();
+                    break;
+                case 'PLAY_CARD':
+                    currentOppCard = data.card;
+                    oppDeckCount = data.remaining;
+                    checkRoundResolution();
+                    break;
+            }
+        }
+
+        function showScreen(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        // --- PREPARATION DU DECK ---
+        function renderDeck() {
+            const container = document.getElementById('deck-container');
+            container.innerHTML = '';
+            myDeck.forEach((c, index) => {
+                container.innerHTML += `
+                    <div class="card">
+                        <span class="atk">⚔️ ${c.atk}</span>
+                        <div class="name">${index + 1}. ${c.name}</div>
+                        <span class="hp">❤️ ${c.hp}</span>
+                    </div>
+                `;
+            });
+        }
+
+        function randomizeDeck() {
+            if (myReady) return;
+            myDeck.sort(() => Math.random() - 0.5);
+            renderDeck();
+        }
+
+        function playerReady() {
+            myReady = true;
+            document.getElementById('btn-ready').disabled = true;
+            document.getElementById('deck-status').innerText = "En attente de l'adversaire...";
+            send('READY');
+            checkBothReady();
+        }
+
+        function checkBothReady() {
+            if (myReady && oppReady) {
+                showScreen('screen-game');
+                updateUI();
+                log("Le combat commence ! Cliquez sur le bouton pour faire affronter vos premières cartes.");
+            }
+        }
+
+        // --- DEROULEMENT DE LA PARTIE ---
+        function triggerRound() {
+            if (currentMyCard || !myDeck.length) return;
+
+            // Prendre la première carte
+            currentMyCard = myDeck.shift();
+            send('PLAY_CARD', { card: currentMyCard, remaining: myDeck.length });
+            
+            document.getElementById('btn-next-round').disabled = true;
+            checkRoundResolution();
+        }
+
+        function checkRoundResolution() {
+            updateUI();
+            
+            // Si les deux joueurs ont envoyé leur carte
+            if (currentMyCard && currentOppCard) {
+                setTimeout(resolveCombat, 1000);
+            }
+        }
+
+        function resolveCombat() {
+            log(`<b>${currentMyCard.name}</b> (${currentMyCard.atk} ATK / ${currentMyCard.hp} PV) s'affronte contre <b>${currentOppCard.name}</b> (${currentOppCard.atk} ATK / ${currentOppCard.hp} PV)`);
+
+            // Combat simultané
+            currentMyCard.hp -= currentOppCard.atk;
+            currentOppCard.hp -= currentMyCard.atk;
+
+            const myDead = currentMyCard.hp <= 0;
+            const oppDead = currentOppCard.hp <= 0;
+
+            if (myDead && oppDead) {
+                log("💥 Les deux cartes sont détruites en même temps ! Aucun point attribué.");
+                currentMyCard = null;
+                currentOppCard = null;
+            } else if (oppDead && !myDead) {
+                myScore++;
+                log(`✅ Votre ${currentMyCard.name} a détruit la carte adverse ! Vous gagnez 1 point.`);
+                currentOppCard = null; // La carte ennemie meurt
+            } else if (myDead && !oppDead) {
+                oppScore++;
+                log(`❌ Votre carte a été détruite ! L'adversaire gagne 1 point.`);
+                currentMyCard = null; // Votre carte meurt
+            } else {
+                log("🛡️ Les deux cartes ont survécu à l'échange et continuent de s'affronter au prochain tour !");
+            }
+
+            updateUI();
+
+            // Vérification des conditions de victoire (Seulement l'hôte décide et notifie, ou chaque client gère localement)
+            if (myScore >= 3) {
+                alert("🎉 VICTOIRE ! Vous avez atteint 3 points !");
+            } else if (oppScore >= 3) {
+                alert("☠️ DEFAITE... L'adversaire a atteint 3 points.");
+            } else if (myDeck.length === 0 && !currentMyCard && myScore < 3) {
+                alert("☠️ DEFAITE... Vous n'avez plus de cartes disponibles.");
+            } else if (oppDeckCount === 0 && !currentOppCard && oppScore < 3) {
+                alert("🎉 VICTOIRE ! L'adversaire n'a plus de cartes.");
+            }
+
+            document.getElementById('btn-next-round').disabled = false;
+        }
+
+        function renderCardHTML(c) {
+            if (!c) return '<div style="color:#777; padding-top:60px;">Aucune carte</div>';
+            return `
+                <div class="card" style="margin: auto;">
+                    <span class="atk">⚔️ ${c.atk}</span>
+                    <div class="name">${c.name}</div>
+                    <span class="hp">❤️ ${c.hp}</span>
+                </div>
+            `;
+        }
+
+        function updateUI() {
+            document.getElementById('my-score').innerText = myScore;
+            document.getElementById('opp-score').innerText = oppScore;
+            document.getElementById('my-deck-count').innerText = myDeck.length;
+            document.getElementById('opp-deck-count').innerText = oppDeckCount;
+
+            document.getElementById('my-active-card').innerHTML = renderCardHTML(currentMyCard);
+            document.getElementById('opp-active-card').innerHTML = renderCardHTML(currentOppCard);
+        }
+
+        function log(msg) {
+            const logs = document.getElementById('logs');
+            logs.innerHTML += `<div>• ${msg}</div>`;
+            logs.scrollTop = logs.scrollHeight;
+        }
+    </script>
+</body>
+</html>
