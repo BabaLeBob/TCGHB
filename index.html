@@ -387,13 +387,12 @@
                     }
                     break;
                 case 'SEND_TO_BACK_DECK':
-                    if (currentMyCard) {
-                        log(`📜 <b>Travail toujours !</b> Votre carte [${currentMyCard.name}] est remise à la fin de votre deck.`);
-                        selectedDeck.push(currentMyCard); // Remet la carte à la fin du deck
-                        currentMyCard = null; // Il n'y a plus de carte sur le terrain
-                        myTurnActionSent = false;
-                        updateUI();
-                    }
+                    // Quand l'adversaire remet sa carte sous son deck, on vide la carte adverse affichée chez toi
+                    currentOppCard = null;
+                    oppTurnActionSent = false;
+                    
+                    log(`📜 <b>Travail toujours !</b> La carte adverse est retournée sous son deck.`);
+                    updateUI();
                     break;
                 case 'APPLY_FLAME_DEBUFF':
                     log(`🔥 <b>Flamme infinie !</b> Toutes vos cartes perdent 2 points d'attaque !`);
@@ -918,10 +917,10 @@
                     myScore++;
                     log(`✅ Votre ${currentMyCard.name} a détruit la carte adverse ! +1 point.`);
                 } else {
-                    log(`📜 <b>Travail toujours :</b> L'adversaire évite la perte de point et réinsère sa carte !`);
+                    log(`📜 <b>Travail toujours :</b> La carte adverse succombe et retourne sous son deck !`);
                 }
 
-                // DÉBLOCAGE OBLIGATOIRE DE L'ADVERSAIRE
+                // DÉBLOCAGE ADVERSAIRE ET NETTOYAGE DU TERRAIN
                 currentOppCard = null;
                 oppTurnActionSent = false;
 
