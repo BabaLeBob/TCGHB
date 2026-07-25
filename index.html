@@ -37,6 +37,26 @@
         .card .effect-desc { font-size: 10px; color: #bbb; background: #1a1a24; padding: 4px; border-radius: 4px; min-height: 32px; display: flex; align-items: center; justify-content: center; }
         .card .controls { display: flex; justify-content: space-between; margin-top: 5px; }
 
+        .player-header {
+            font-family: Arial, sans-serif;
+            font-size: 1.2rem;
+            font-weight: bold;
+            padding: 8px 15px;
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            border-radius: 8px;
+            display: inline-block;
+            margin: 5px 0;
+        }
+
+        .opponent-header {
+            border-left: 4px solid #e74c3c; /* Rouge pour l'adversaire */
+        }
+
+        .my-header {
+            border-left: 4px solid #2ecc71; /* Vert pour toi */
+        }
+
         /* Zones */
         .deck-builder-section { background: #1a1a24; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
         .battleboard { display: flex; justify-content: space-around; align-items: center; margin: 30px 0; background: #1a1a24; padding: 20px; border-radius: 8px; min-height: 220px; }
@@ -45,19 +65,23 @@
     </style>
 </head>
 <body>
-
-    <!-- MENU PRINCIPAL -->
-    <div id="screen-menu" class="screen active">
-        <h1>⚔️ TCG - Jeu de cartes ⚔️</h1>
-        <p>Affronte tes amis en duel dans un combat 5v5 automatisé !</p>
-        <br>
-        <button onclick="createGame()">Créer un salon</button>
+    <div id="main-menu">
+        <h2>TCG S.K sur Herobrine.fr</h2>
+        
+        <!-- Champ Pseudo -->
+        <input type="text" id="username-input" placeholder="Ton pseudo..." value="Joueur">
         <br><br>
-        <div>
-            <input type="text" id="join-code" placeholder="Entrer le Code de Salon">
-            <button onclick="joinGame()">Rejoindre</button>
-        </div>
-        <p id="menu-status" style="color: #ffca28; font-weight: bold; margin-top: 20px;"></p>
+
+        <!-- Héberger une partie -->
+        <button onclick="hostGame()">Créer une partie</button>
+        <div id="my-code-display"></div>
+        <br>
+
+        <!-- Rejoindre une partie -->
+        <input type="text" id="join-code" placeholder="Code du salon...">
+        <button onclick="joinGame()">Rejoindre</button>
+
+        <p id="menu-status"></p>
     </div>
 
     <!-- PREPARATION DU DECK -->
@@ -81,6 +105,17 @@
 
     <!-- PLATEAU DE JEU -->
     <div id="screen-game" class="screen">
+        <!-- En-tête / Zone Adversaire -->
+        <div class="player-header opponent-header">
+            <span class="player-name" id="opp-name-display">Adversaire</span>
+        </div>
+
+        <!-- Zone de jeu / Cartes... -->
+
+        <!-- En-tête / Zone Joueur -->
+        <div class="player-header my-header">
+            <span class="player-name" id="my-name-display">Vous</span>
+        </div>
         <div class="scores">
             <div>Vous: <span id="my-score">0</span> pts (Cartes: <span id="my-deck-count">0</span>)</div>
             <div>Adversaire: <span id="opp-score">0</span> pts (Cartes: <span id="opp-deck-count">0</span>)</div>
@@ -114,6 +149,14 @@
             <div id="logs" class="log-box"></div>
         </div>
     </div>
+        <!-- Modale de fin de partie -->
+    <div id="end-game-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2 id="end-game-title">Résultat</h2>
+            <p id="end-game-message"></p>
+            <button id="btn-return-menu" onclick="returnToMenu()">Retour au menu principal</button>
+        </div>
+    </div>
 
     <script>
         let cardPool = [];
@@ -126,6 +169,8 @@
         let currentMyCard = null, currentOppCard = null;
         let totalDeadCards = 0;
         let myDeadApprentices = 0;
+        let myUsername = "Joueur";
+        let oppUsername = "Adversaire";
 
         // Suivi de l'état du tour
         let myTurnActionSent = false;
@@ -182,6 +227,9 @@
 
         function joinGame() {
             const code = document.getElementById('join-code').value.trim();
+            if (input !== "") {
+                myUsername = input;
+            }
             if (!code) return alert("Veuillez entrer un code valide.");
             document.getElementById('menu-status').innerText = "Connexion...";
             peer = new Peer();
@@ -368,6 +416,18 @@
                     });
                     
                     updateUI();
+                    break;
+                case 'GAME_START':
+                case 'PLAYER_INFO':
+                    if (data.myName) {
+                        myPlayerName = data.myName;
+                        document.getElementById('my-name-display').innerText = myPlayerName;
+                    }
+                    if (data.oppName) {
+                        oppPlayerName = data.oppName;
+                        document.getElementById('opp-name-display').innerText = oppPlayerName;
+                    }
+                    log(`🎮 Partie lancée : <b>${myPlayerName}</b> VS <b>${oppPlayerName}</b>`);
                     break;
             }
         }
@@ -979,11 +1039,21 @@
                 document.getElementById('btn-next-round').disabled = false;
             }
 
-            // Vérification des victoires / défaites
-            if (myScore >= 3) alert("🎉 VICTOIRE !");
-            else if (oppScore >= 3) alert("☠️ DEFAITE...");
-            else if (selectedDeck.length === 0 && !currentMyCard && myScore < 3) alert("☠️ DEFAITE... Plus de cartes.");
-            else if (oppDeckCount === 0 && !currentOppCard && oppScore < 3) alert("🎉 VICTOIRE ! L'adversaire n'a plus de cartes.");
+            const myDeckEmpty = selectedDeck.length === 0 && !currentMyCard;
+            const oppDeckEmpty = oppDeckCount === 0 && !currentOppCard;
+
+            // 1. Égalité si les deux atteignent 3 points en même temps OU si les deux n'ont plus de cartes avec le même score
+            if ((myScore >= 3 && oppScore >= 3) || (myDeckEmpty && oppDeckEmpty && myScore === oppScore)) {
+                showEndGameModal("ÉGALITÉ !", "Les deux joueurs se sont neutralisés !");
+            } 
+            // 2. Victoire
+            else if (myScore >= 3 || (oppDeckEmpty && myScore > oppScore)) {
+                showEndGameModal("VICTOIRE !", "Félicitations, vous avez remporté le combat !");
+            } 
+            // 3. Défaite
+            else if (oppScore >= 3 || (myDeckEmpty && myScore < oppScore)) {
+                showEndGameModal("DÉFAITE", "Vous avez perdu cette bataille.");
+            }
         }
 
         function renderCardHTML(c) {
@@ -1102,6 +1172,17 @@
             } else {
                 log(`📖 Aucun choix valide fait pour Maître des Théories.`);
             }
+        }
+        // --- FONCTIONS D'AFFICHAGE ET REDIRECTION ---
+        function showEndGameModal(title, message) {
+            document.getElementById('end-game-title').innerText = title;
+            document.getElementById('end-game-message').innerText = message;
+            document.getElementById('end-game-modal').style.display = 'flex';
+        }
+
+        function returnToMenu() {
+            // Option A : Rediriger vers la page du menu
+            window.location.href = "index.html"; // Change par le nom de ta page de menu
         }
     </script>
 </body>
