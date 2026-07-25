@@ -387,12 +387,13 @@
                     }
                     break;
                 case 'SEND_TO_BACK_DECK':
-                    // Quand l'adversaire remet sa carte sous son deck, on vide la carte adverse affichée chez toi
-                    currentOppCard = null;
-                    oppTurnActionSent = false;
-                    
-                    log(`📜 <b>Travail toujours !</b> La carte adverse est retournée sous son deck.`);
-                    updateUI();
+                    if (currentMyCard) {
+                        log(`📜 <b>Travail toujours !</b> Votre carte [${currentMyCard.name}] est renvoyée au fond de votre deck.`);
+                        selectedDeck.push(currentMyCard); // Ta carte retourne dans ton deck
+                        currentMyCard = null;             // Retirée de ton plateau
+                        myTurnActionSent = false;
+                        updateUI();
+                    }
                     break;
                 case 'APPLY_FLAME_DEBUFF':
                     log(`🔥 <b>Flamme infinie !</b> Toutes vos cartes perdent 2 points d'attaque !`);
