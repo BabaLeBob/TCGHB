@@ -124,6 +124,8 @@
         let peer, conn;
         let myReady = false, oppReady = false;
         let currentMyCard = null, currentOppCard = null;
+        let totalDeadCards = 0;
+        let myDeadApprentices = 0;
 
         // Suivi de l'état du tour
         let myTurnActionSent = false;
@@ -137,6 +139,25 @@
         let myFloralHealActive = false;
         let oppFloralHealActive = false;
         let myDiscussionTriggered = false;
+        let myGuildForgeActive = false;
+        let oppGuildForgeActive = false;
+        let myGuildForceActive = false;
+        let oppGuildForceActive = false;
+        let myQuickHealActive = false;
+        let oppQuickHealActive = false;
+        let myProtectorShieldActive = false;
+        let oppProtectorShieldActive = false;
+        let myHeavyShieldActive = false;
+        let oppHeavyShieldActive = false;
+        let myBudgetCrisisActive = false; // Si vrai, la prochaine carte piochée/jouée est brûlée
+
+        let deadTheoreticians = []; // Stocke les cartes Théoricien/ne éliminées
+
+        function isTheoreticianCard(card) {
+            if (!card) return false;
+            const name = card.name.toLowerCase();
+            return name.includes("theoricien") || name.includes("theoricienne") || name.includes("théororicien") || name.includes("théoricienne");
+        }
 
         async function loadCardPool() {
             try {
@@ -219,6 +240,63 @@
                         log(`🌱 L'adversaire soigne <b>[${currentOppCard.name}]</b> avec le Soin Floral (+2 PV) !`);
                         oppFloralHealActive = false;
                     }
+                    // CHECK EFFET "FORGE DES CONFRÈRES" POUR L'ADVERSAIRE
+                    if (oppGuildForgeActive) {
+                        const cardName = currentOppCard.name.toLowerCase();
+                        const isGuildMember = cardName.includes("cadet") || 
+                                            cardName.includes("veilleur") || 
+                                            cardName.includes("aine") || 
+                                            cardName.includes("patriarque") || 
+                                            (currentOppCard.effect && currentOppCard.effect.type === "CONFRERE");
+
+                        if (isGuildMember) {
+                            currentOppCard.atk += 3;
+                            log(`🛡️ L'adversaire renforce <b>[${currentOppCard.name}]</b> avec la Forge des Confrères (+3 ATK) !`);
+                        }
+                        oppGuildForgeActive = false; // L'effet est consommé
+                    }
+                    // CHECK EFFET "MORTEL MAIS CONFRÈRIE" POUR L'ADVERSAIRE
+                    if (currentOppCard.effect && currentOppCard.effect.type === "DEADLY_GUILD") {
+                        if (data.isFullGuild) {
+                            currentOppCard.hp += 5;
+                            log(`💀 L'adversaire joue <b>[${currentOppCard.name}]</b> avec un Deck 100% Confrère (+5 PV) !`);
+                        }
+                    }
+                    // CHECK EFFET "FORCE DES CONFRÈRES" POUR L'ADVERSAIRE
+                    if (oppGuildForceActive) {
+                        if (isGuildCard(currentOppCard)) {
+                            currentOppCard.hp += 2;
+                            log(`💚 L'adversaire renforce <b>[${currentOppCard.name}]</b> avec la Force des Confrères (+2 PV) !`);
+                        }
+                        oppGuildForceActive = false; // L'effet est consommé
+                    }
+                    // CHECK EFFET "SOIN RAPIDE" POUR L'ADVERSAIRE
+                    if (oppQuickHealActive) {
+                        currentOppCard.hp += 2;
+                        log(`💚 L'adversaire soigne <b>[${currentOppCard.name}]</b> avec le Soin rapide (+2 PV) !`);
+                        oppQuickHealActive = false; // Effet consommé
+                    }
+                    // CHECK EFFET "BOUCLIER DES PROTECTEURS" POUR L'ADVERSAIRE
+                    if (oppProtectorShieldActive) {
+                        const isProtector = isProtectorCard(currentOppCard);
+                        const healAmount = isProtector ? 6 : 3;
+                        
+                        currentOppCard.hp += healAmount;
+                        
+                        if (isProtector) {
+                            log(`🛡️ L'adversaire joue un Protecteur <b>[${currentOppCard.name}]</b> ! Bouclier doublé (+6 PV) !`);
+                        } else {
+                            log(`🛡️ L'adversaire renforce <b>[${currentOppCard.name}]</b> avec le Bouclier des Protecteurs (+3 PV) !`);
+                        }
+                        
+                        oppProtectorShieldActive = false; // Effet consommé
+                    }
+                    // CHECK EFFET "BOUCLIER LOURD" POUR L'ADVERSAIRE
+                    if (oppHeavyShieldActive) {
+                        currentOppCard.hp += 5;
+                        log(`🛡️ L'adversaire renforce <b>[${currentOppCard.name}]</b> avec le Bouclier lourd (+5 PV) !`);
+                        oppHeavyShieldActive = false; // Effet consommé
+                    }
                     oppTurnActionSent = true;
                     checkRoundResolution();
                     break;
@@ -231,6 +309,56 @@
                 case 'PEEK_NEXT_CARD':
                     // On reçoit l'information sur la prochaine carte adverse
                     showDiscussionInterface(data.card);
+                    break;
+                case 'PERFECT_SWAP':
+                    if (currentMyCard && selectedDeck.length > 0) {
+                        // 1. Récupère la dernière carte du deck
+                        const lastCardIndex = selectedDeck.length - 1;
+                        const temp = currentMyCard;
+                        
+                        // 2. Échange la carte active avec la dernière
+                        currentMyCard = selectedDeck[lastCardIndex];
+                        selectedDeck[lastCardIndex] = temp;
+
+                        log(`🔄 <b>Échange Parfait !</b> Votre carte [${temp.name}] a été échangée avec [${currentMyCard.name}].`);
+                        
+                        // 3. Préviens l'adversaire de votre nouvelle carte
+                        send('PLAY_CARD', { 
+                            card: currentMyCard, 
+                            remaining: selectedDeck.length,
+                            isFullGuild: isGuildCard(currentMyCard) && selectedDeck.every(c => isGuildCard(c))
+                        });
+                        
+                        updateUI();
+                    }
+                    break;
+                case 'SEND_TO_BACK_DECK':
+                    if (currentMyCard) {
+                        log(`📜 <b>Travail toujours !</b> Votre carte [${currentMyCard.name}] est remise à la fin de votre deck.`);
+                        selectedDeck.push(currentMyCard); // Remet la carte à la fin du deck
+                        currentMyCard = null; // Il n'y a plus de carte sur le terrain
+                        myTurnActionSent = false;
+                        updateUI();
+                    }
+                    break;
+                case 'APPLY_FLAME_DEBUFF':
+                    log(`🔥 <b>Flamme infinie !</b> Toutes vos cartes perdent 2 points d'attaque !`);
+                    
+                    // 1. Réduction sur la carte active sur le terrain
+                    if (currentMyCard) {
+                        currentMyCard.atk = Math.max(0, currentMyCard.atk - 2);
+                    }
+                    
+                    // 2. Réduction sur toutes les cartes restantes dans votre deck
+                    selectedDeck.forEach(card => {
+                        card.atk = Math.max(0, card.atk - 2);
+                    });
+                    
+                    updateUI();
+                    break;
+                case 'APPLY_BUDGET_CRISIS':
+                    log(`💸 <b>Crise budgétaire !</b> Votre prochaine carte sera défaussée directement !`);
+                    myBudgetCrisisActive = true;
                     break;
             }
         }
@@ -362,6 +490,65 @@
                 log(`🌱 <b>[${currentMyCard.name}]</b> bénéficie du Soin Floral (+2 PV) !`);
                 myFloralHealActive = false; // L'effet est consommé
             }
+            // CHECK EFFET "FORGE DES CONFRÈRES" POUR LE JOUEUR
+            if (myGuildForgeActive) {
+                const cardName = currentMyCard.name.toLowerCase();
+                const isGuildMember = cardName.includes("cadet") || 
+                                    cardName.includes("veilleur") || 
+                                    cardName.includes("aine") || 
+                                    cardName.includes("patriarque") || 
+                                    (currentMyCard.effect && currentMyCard.effect.type === "CONFRERE");
+
+                if (isGuildMember) {
+                    currentMyCard.atk += 3;
+                    log(`🛡️ <b>[${currentMyCard.name}]</b> s'arme à la Forge des Confrères (+3 ATK) !`);
+                }
+                myGuildForgeActive = false; // L'effet est consommé
+            }
+            // CHECK EFFET "MORTEL MAIS CONFRÈRIE" POUR LE JOUEUR
+            if (currentMyCard.effect && currentMyCard.effect.type === "DEADLY_GUILD") {
+                // Vérifie si la carte + toutes celles qui restent dans le deck sont des Confrères
+                const allGuild = isGuildCard(currentMyCard) && selectedDeck.every(c => isGuildCard(c));
+                if (allGuild) {
+                    currentMyCard.hp += 5;
+                    log(`💀 <b>[${currentMyCard.name}]</b> s'impose ! Deck 100% Confrère (+5 PV)`);
+                }
+            }
+            // CHECK EFFET "FORCE DES CONFRÈRES" POUR LE JOUEUR
+            if (myGuildForceActive) {
+                if (isGuildCard(currentMyCard)) {
+                    currentMyCard.hp += 2;
+                    log(`💚 <b>[${currentMyCard.name}]</b> reçoit la Force des Confrères (+2 PV) !`);
+                }
+                myGuildForceActive = false; // L'effet est consommé
+            }
+            // CHECK EFFET "SOIN RAPIDE" POUR LE JOUEUR
+            if (myQuickHealActive) {
+                currentMyCard.hp += 2;
+                log(`💚 <b>[${currentMyCard.name}]</b> profite du Soin rapide (+2 PV) !`);
+                myQuickHealActive = false; // Effet consommé
+            }
+            // CHECK EFFET "BOUCLIER DES PROTECTEURS" POUR LE JOUEUR
+            if (myProtectorShieldActive) {
+                const isProtector = isProtectorCard(currentMyCard);
+                const healAmount = isProtector ? 6 : 3; // +6 PV si Protecteur (effet doublé), sinon +3 PV
+                
+                currentMyCard.hp += healAmount;
+                
+                if (isProtector) {
+                    log(`🛡️ <b>[${currentMyCard.name}]</b> est un Protecteur ! Bouclier doublé (+6 PV) !`);
+                } else {
+                    log(`🛡️ <b>[${currentMyCard.name}]</b> profite du Bouclier des Protecteurs (+3 PV) !`);
+                }
+                
+                myProtectorShieldActive = false; // Effet consommé
+            }
+            // CHECK EFFET "BOUCLIER LOURD" POUR LE JOUEUR
+            if (myHeavyShieldActive) {
+                currentMyCard.hp += 5;
+                log(`🛡️ <b>[${currentMyCard.name}]</b> profite du Bouclier lourd (+5 PV) !`);
+                myHeavyShieldActive = false; // Effet consommé
+            }
 
             send('PLAY_CARD', { card: currentMyCard, remaining: selectedDeck.length });
 
@@ -408,6 +595,148 @@
                     log(`🌸 L'adversaire active Soin Floral !`);
                 }
             }
+            // EFFET : Forge des Confrères
+            if (card.effect.type === "GUILD_FORGE") {
+                if (isMyCard) {
+                    myGuildForgeActive = true;
+                    log(`🔨 <b>[${card.name}]</b> prépare la Forge des Confrères ! (Bonus pour le prochain Confrère)`);
+                } else {
+                    oppGuildForgeActive = true;
+                    log(`🔨 L'adversaire active la Forge des Confrères !`);
+                }
+            }
+            // EFFET : Force des Confrères
+            if (card.effect.type === "GUILD_FORCE") {
+                if (isMyCard) {
+                    myGuildForceActive = true;
+                    log(`🛡️ <b>[${card.name}]</b> invoque la Force des Confrères ! (+2 PV pour le prochain Confrère)`);
+                } else {
+                    oppGuildForceActive = true;
+                    log(`🛡️ L'adversaire active la Force des Confrères !`);
+                }
+            }
+            // EFFET : Croc'champi
+            if (card.effect.type === "CROC_CHAMPI") {
+                if (isMyCard) {
+                    log(`🍄 <b>[${card.name}]</b> lance Croc'champi ! L'effet adverse est réduis à néant.`);
+                    if (currentOppCard && currentOppCard.effect) {
+                        currentOppCard.effect.type = "NONE";
+                        currentOppCard.effect.description = "Effet annulé par Croc'champi.";
+                    }
+                } else {
+                    log(`🍄 L'adversaire lance Croc'champi ! Votre effet est annulé.`);
+                    if (currentMyCard && currentMyCard.effect) {
+                        currentMyCard.effect.type = "NONE";
+                        currentMyCard.effect.description = "Effet annulé par Croc'champi.";
+                    }
+                }
+            }
+            // EFFET : Échange Parfait
+            if (card.effect.type === "PERFECT_SWAP") {
+                if (isMyCard) {
+                    log(`🔄 <b>[${card.name}]</b> déclenche Échange Parfait !`);
+                    send('PERFECT_SWAP');
+                } else {
+                    log(`🔄 L'adversaire active Échange Parfait !`);
+                }
+            }
+            // EFFET : Soin rapide
+            if (card.effect.type === "QUICK_HEAL") {
+                if (isMyCard) {
+                    myQuickHealActive = true;
+                    log(`✨ <b>[${card.name}]</b> lance Soin rapide ! (+2 PV pour votre prochaine carte)`);
+                } else {
+                    oppQuickHealActive = true;
+                    log(`✨ L'adversaire active Soin rapide !`);
+                }
+            }
+            // EFFET : Pouvoir de sorcière
+            if (card.effect.type === "WITCH_POWER") {
+                if (isMyCard) {
+                    if (currentOppCard) {
+                        currentOppCard.atk = Math.max(0, currentOppCard.atk - 2);
+                        log(`🧙‍♀️ <b>[${card.name}]</b> lance Pouvoir de sorcière ! La carte adverse perd 2 ATK.`);
+                    }
+                } else {
+                    if (currentMyCard) {
+                        currentMyCard.atk = Math.max(0, currentMyCard.atk - 2);
+                        log(`🧙‍♀️ L'adversaire lance Pouvoir de sorcière ! Votre <b>[${currentMyCard.name}]</b> perd 2 ATK.`);
+                    }
+                }
+            }
+            // EFFET : Bouclier des Protecteurs
+            if (card.effect.type === "PROTECTOR_SHIELD") {
+                if (isMyCard) {
+                    myProtectorShieldActive = true;
+                    log(`🛡️ <b>[${card.name}]</b> active le Bouclier des Protecteurs !`);
+                } else {
+                    oppProtectorShieldActive = true;
+                    log(`🛡️ L'adversaire active le Bouclier des Protecteurs !`);
+                }
+            }
+            // EFFET : Soin parfait
+            if (card.effect.type === "PERFECT_HEAL") {
+                const healBonus = totalDeadCards;
+                card.hp += healBonus;
+
+                if (isMyCard) {
+                    log(`💖 <b>[${card.name}]</b> lance Soin parfait ! (+${healBonus} PV basés sur ${totalDeadCards} carte(s) mortes)`);
+                } else {
+                    log(`💖 L'adversaire lance Soin parfait ! (+${healBonus} PV basés sur ${totalDeadCards} carte(s) mortes)`);
+                }
+            }
+            // EFFET : Flamme infinie
+            if (card.effect.type === "INFINITE_FLAME") {
+                if (isMyCard) {
+                    log(`🔥 <b>[${card.name}]</b> déchaîne la Flamme infinie ! Toutes les cartes adverses perdent 2 ATK.`);
+                    
+                    // Réduit l'attaque de la carte adverse actuellement en jeu
+                    if (currentOppCard) {
+                        currentOppCard.atk = Math.max(0, currentOppCard.atk - 2);
+                    }
+                    
+                    // Envoie l'ordre à l'adversaire de réduire aussi tout son deck
+                    send('APPLY_FLAME_DEBUFF');
+                } else {
+                    log(`🔥 L'adversaire déchaîne la Flamme infinie !`);
+                }
+            }
+            // EFFET : Apprentissage
+            if (card.effect.type === "APPRENTICESHIP") {
+                if (isMyCard) {
+                    // Si au moins un apprenti est mort, on multiplie par ce nombre, sinon multiplicateur de 1
+                    const multiplier = Math.max(1, myDeadApprentices);
+                    const originalHp = card.hp;
+                    card.hp = card.hp * multiplier;
+
+                    log(`📚 <b>[${card.name}]</b> active Apprentissage ! PV : ${originalHp} x ${multiplier} = ${card.hp} PV (${myDeadApprentices} Apprenti.e(s) mort.e.s).`);
+                } else {
+                    log(`📚 L'adversaire active Apprentissage !`);
+                }
+            }
+            // EFFET : Maître des Théories
+            if (card.effect.type === "THEORY_MASTER") {
+                if (isMyCard) {
+                    if (deadTheoreticians.length === 0) {
+                        log(`📖 <b>[${card.name}]</b> : Aucun Théoricien/ne mort.e à copier.`);
+                    } else {
+                        // Demande au joueur de choisir une carte
+                        selectTheoreticianEffect(card);
+                    }
+                } else {
+                    log(`📖 L'adversaire joue Maître des Théories !`);
+                }
+            }
+            // EFFET : Bouclier lourd
+            if (card.effect.type === "HEAVY_SHIELD") {
+                if (isMyCard) {
+                    myHeavyShieldActive = true;
+                    log(`🛡️ <b>[${card.name}]</b> active Bouclier lourd ! (+5 PV pour votre prochaine carte)`);
+                } else {
+                    oppHeavyShieldActive = true;
+                    log(`🛡️ L'adversaire active Bouclier lourd !`);
+                }
+            }
         }
 
         function resolveCombat() {
@@ -430,10 +759,37 @@
 
             // 1. ONSAVE L'EFFET AVANT LA DESTRUCTION DE LA CARTE
             const myCardEffectType = currentMyCard.effect ? currentMyCard.effect.type : null;
+            const oppCardEffectType = currentOppCard.effect ? currentOppCard.effect.type : null;
 
-            // Calcul des dégâts
-            currentMyCard.hp -= currentOppCard.atk;
-            currentOppCard.hp -= currentMyCard.atk;
+            // Verification des effets de Foudre (Initiative)
+            const myHasLightning = currentMyCard.effect && currentMyCard.effect.type === "LIGHTNING";
+            const oppHasLightning = currentOppCard.effect && currentOppCard.effect.type === "LIGHTNING";
+
+            if (myHasLightning && !oppHasLightning) {
+                // ⚡ Mon joueur frappe en premier
+                log(`⚡ <b>[${currentMyCard.name}]</b> utilise Foudre et frappe avant de subir les dégâts !`);
+                currentOppCard.hp -= currentMyCard.atk;
+
+                // Si l'adversaire surviv à la foudre, il riposte
+                if (currentOppCard.hp > 0) {
+                    currentMyCard.hp -= currentOppCard.atk;
+                }
+
+            } else if (oppHasLightning && !myHasLightning) {
+                // ⚡ L'adversaire frappe en premier
+                log(`⚡ L'adversaire utilise Foudre avec <b>[${currentOppCard.name}]</b> et frappe en premier !`);
+                currentMyCard.hp -= currentOppCard.atk;
+
+                // Si ma carte survit à la foudre, elle riposte
+                if (currentMyCard.hp > 0) {
+                    currentOppCard.hp -= currentMyCard.atk;
+                }
+
+            } else {
+                // Combat normal (les deux frappent en même temps, ou les deux ont Foudre)
+                currentMyCard.hp -= currentOppCard.atk;
+                currentOppCard.hp -= currentMyCard.atk;
+            }
 
             const myDead = currentMyCard.hp <= 0;
             const oppDead = currentOppCard.hp <= 0;
@@ -444,16 +800,26 @@
                 currentOppCard = null;
                 myTurnActionSent = false;
                 oppTurnActionSent = false;
-            } else if (oppDead && !myDead) {
-                myScore++;
-                log(`✅ Votre ${currentMyCard.name} a détruit la carte adverse ! +1 point.`);
-                currentOppCard = null;
-                oppTurnActionSent = false;
-            } else if (myDead && !oppDead) {
-                oppScore++;
-                log(`❌ Votre carte a été détruite ! +1 point pour l'adversaire.`);
-                currentMyCard = null;
-                myTurnActionSent = false;
+            } else if (myDead) {
+                if (myCardEffectType !== "ALWAYS_WORK") {
+                    oppScore++;
+                    log(`❌ Votre carte a été détruite ! +1 point pour l'adversaire.`);
+                    currentMyCard = null;
+                    myTurnActionSent = false;
+                } else {
+                    log(`📜 <b>Travail toujours :</b> Aucune attribution de point pour l'adversaire !`);
+                    send('SEND_TO_BACK_DECK'); // Ordonne à l'adversaire de remettre sa carte à la fin de son deck
+                }
+            } else if (oppDead) {
+                if (oppCardEffectType !== "ALWAYS_WORK") {
+                    myScore++;
+                    log(`✅ Votre ${currentMyCard.name} a détruit la carte adverse ! +1 point.`);
+                    currentOppCard = null;
+                    oppTurnActionSent = false;
+                } else {
+                    log(`📜 <b>Travail toujours :</b> Vous ne marquez aucun point pour cette élimination !`);
+                    // L'adversaire exécutera lui-même le renvoi de ta carte quand il traitera sa propre mort de carte
+                }
             } else {
                 log("🛡️ Les deux cartes survivent ! Nouvel assaut imminent...");
                 updateUI();
@@ -461,10 +827,125 @@
                 return; 
             }
 
+            // Mise à jour du compteur global de morts
+            if (myDead) totalDeadCards++;
+            if (myDead) {
+                if (isApprenticeCard(currentMyCard)) {
+                    myDeadApprentices++;
+                }
+            }
+            if (myDead && isTheoreticianCard(currentMyCard)) {
+                deadTheoreticians.push(currentMyCard); }
+            if (oppDead) totalDeadCards++;
+
             // 2. ON VERIFIE L'EFFET AVEC LA VARIABLE SAUVEGARDÉE
             if (myDead && myCardEffectType === "DISCUSSION") {
                 log(`💬 Discussion se déclenche à la mort de la carte !`);
                 send('REQUEST_NEXT_CARD');
+            }
+            // EFFET : Accueil
+            if (myDead && myCardEffectType === "WELCOME") {
+                let buffedCount = 0;
+                selectedDeck.forEach(card => {
+                    if (isApprenticeCard(card)) {
+                        card.hp += 2;
+                        buffedCount++;
+                    }
+                });
+
+                if (buffedCount > 0) {
+                    log(`🏠 <b>Accueil</b> : ${buffedCount} carte(s) Apprenti.e dans votre deck gagnent +2 PV !`);
+                } else {
+                    log(`🏠 <b>Accueil</b> activé, mais aucun Apprenti.e dans le deck restant.`);
+                }
+            }
+            // EFFET : Bénéfice (pour le joueur)
+            if (myDead && myCardEffectType === "BENEFIT") {
+                myScore++;
+                log(`💰 <b>[Bénéfice]</b> Votre carte est détruite mais vous rapporte +1 point !`);
+            }
+
+            // EFFET : Bénéfice (pour l'adversaire)
+            if (oppDead && oppCardEffectType === "BENEFIT") {
+                oppScore++;
+                log(`💰 <b>[Bénéfice]</b> La carte adverse est détruite mais lui rapporte +1 point !`);
+            }
+            // EFFET : Vengeance Chamanique (pour le joueur)
+            if (myDead && myCardEffectType === "SHAMANIC_VENGEANCE") {
+                log(`⚡ <b>[Vengeance Chamanique]</b> Votre carte libère sa vengeance à sa mort !`);
+                if (currentOppCard) {
+                    currentOppCard.hp -= 20;
+                    log(`🔥 La carte adverse subit 20 dégâts de vengeance ! (PV restants : ${currentOppCard.hp})`);
+                    
+                    // On vérifie si la carte adverse meurt aussi suite à ces dégâts
+                    if (currentOppCard.hp <= 0) {
+                        myScore++;
+                        log(`💥 La carte adverse succombe à la Vengeance Chamanique ! +1 point.`);
+                        currentOppCard = null;
+                        oppTurnActionSent = false;
+                    }
+                }
+            }
+
+            // EFFET : Vengeance Chamanique (pour l'adversaire)
+            if (oppDead && oppCardEffectType === "SHAMANIC_VENGEANCE") {
+                log(`⚡ <b>[Vengeance Chamanique]</b> La carte adverse libère sa vengeance à sa mort !`);
+                if (currentMyCard) {
+                    currentMyCard.hp -= 20;
+                    log(`🔥 Votre <b>[${currentMyCard.name}]</b> subit 20 dégâts de vengeance ! (PV restants : ${currentMyCard.hp})`);
+                    
+                    // On vérifie si votre carte meurt aussi suite à ces dégâts
+                    if (currentMyCard.hp <= 0) {
+                        oppScore++;
+                        log(`💥 Votre carte succombe à la Vengeance Chamanique adverse ! +1 point pour l'adversaire.`);
+                        currentMyCard = null;
+                        myTurnActionSent = false;
+                    }
+                }
+            }
+
+            // EFFET : Élévation
+            if (myDead && myCardEffectType === "ELEVATION") {
+                let buffedCount = 0;
+                selectedDeck.forEach(card => {
+                    if (isApprenticeCard(card)) {
+                        card.atk += 2;
+                        buffedCount++;
+                    }
+                });
+
+                if (buffedCount > 0) {
+                    log(`✨ <b>Élévation</b> : ${buffedCount} carte(s) Apprenti.e dans votre deck gagnent +2 ATK !`);
+                } else {
+                    log(`✨ <b>Élévation</b> activée, mais aucun Apprenti.e dans le deck restant.`);
+                }
+            }
+
+            // EFFET : Champi'pote (pour le joueur)
+            if (myDead && myCardEffectType === "CHAMPI_POTE") {
+                if (currentOppCard) {
+                    currentOppCard.atk = 0;
+                    log(`🍄 <b>Champi'pote</b> : À sa mort, la carte adverse [${currentOppCard.name}] perd toute son attaque (0 ATK) !`);
+                }
+            }
+
+            // EFFET : Champi'pote (pour l'adversaire)
+            if (oppDead && oppCardEffectType === "CHAMPI_POTE") {
+                if (currentMyCard) {
+                    currentMyCard.atk = 0;
+                    log(`🍄 <b>Champi'pote</b> adverse : À sa mort, votre carte [${currentMyCard.name}] perd toute son attaque (0 ATK) !`);
+                }
+            }
+            // EFFET : Crise budgétaire (pour le joueur)
+            if (myDead && myCardEffectType === "BUDGET_CRISIS") {
+                log(`💸 <b>[Crise budgétaire]</b> Votre carte meurt et déclenche une crise chez l'adversaire !`);
+                send('APPLY_BUDGET_CRISIS');
+            }
+
+            // EFFET : Crise budgétaire (pour l'adversaire)
+            if (oppDead && oppCardEffectType === "BUDGET_CRISIS") {
+                log(`💸 <b>[Crise budgétaire]</b> La carte adverse déclenche une crise dans vos finances !`);
+                myBudgetCrisisActive = true;
             }
 
             updateUI();
@@ -480,7 +961,7 @@
             else if (selectedDeck.length === 0 && !currentMyCard && myScore < 3) alert("☠️ DEFAITE... Plus de cartes.");
             else if (oppDeckCount === 0 && !currentOppCard && oppScore < 3) alert("🎉 VICTOIRE ! L'adversaire n'a plus de cartes.");
         }
-        
+
         function renderCardHTML(c) {
             if (!c) return '<div style="color:#777; padding-top:70px;">Aucune carte</div>';
             return `
@@ -549,6 +1030,58 @@
 
         function closeDiscussionModal() {
             document.getElementById('discussion-modal').style.display = 'none';
+        }
+        // Fonction utilitaire pour tester si une carte est un Confrère
+        function isGuildCard(card) {
+            if (!card) return false;
+            const name = card.name.toLowerCase();
+            return name.includes("cadet") || 
+                name.includes("veilleur") || 
+                name.includes("aine") || 
+                name.includes("patriarque") || 
+                (card.effect && card.effect.type === "CONFRERE");
+        }
+        function isApprenticeCard(card) {
+            if (!card) return false;
+            const name = card.name.toLowerCase();
+            return name.includes("apprenti") || (card.effect && card.effect.type === "APPRENTI");
+        }
+        function isProtectorCard(card) {
+            if (!card) return false;
+            const name = card.name.toLowerCase();
+            const protectorKeywords = [
+                "ecuyer", "ecuyere", "chevalier", "chevaleresse", 
+                "haut-chevalier", "haut-chevaleresse", "sentinelle", 
+                "gardien", "gardienne"
+            ];
+            
+            const matchesName = protectorKeywords.some(keyword => name.includes(keyword));
+            const matchesEffect = card.effect && (card.effect.type === "PROTECTOR" || card.effect.type === "PROTECTEUR");
+            
+            return matchesName || matchesEffect;
+        }
+        function selectTheoreticianEffect(masterCard) {
+            // Création du texte de choix
+            let optionsText = "Choisissez l'effet d'une carte à copier :\n";
+            deadTheoreticians.forEach((card, index) => {
+                optionsText += `${index + 1}. ${card.name} (${card.effect ? card.effect.description : 'Sans effet'})\n`;
+            });
+
+            const choice = prompt(optionsText);
+            const selectedIndex = parseInt(choice) - 1;
+
+            if (!isNaN(selectedIndex) && deadTheoreticians[selectedIndex]) {
+                const chosenCard = deadTheoreticians[selectedIndex];
+                
+                // Copie de l'effet
+                masterCard.effect = chosenCard.effect;
+                log(`📖 <b>[${masterCard.name}]</b> a copié l'effet de <b>[${chosenCard.name}]</b> !`);
+                
+                // Exécution immédiate du nouvel effet copié si nécessaire
+                applyCardEffect(masterCard, true);
+            } else {
+                log(`📖 Aucun choix valide fait pour Maître des Théories.`);
+            }
         }
     </script>
 </body>
