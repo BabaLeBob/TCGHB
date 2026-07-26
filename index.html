@@ -81,6 +81,24 @@
         <input type="text" id="join-code" placeholder="Code du salon...">
         <button onclick="joinGame()">Rejoindre</button>
 
+        <!-- Zone 1 : Règles du TCG -->
+        <div class="menu-info" style="background: #1a1a24; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #4e8cff; text-align: left;">
+            <h3 style="margin-top: 0;">Règles du TCG</h3>
+            <p style="font-size: 14px; color: #bbb; margin-bottom: 0;">
+                • Créez un deck de 5 cartes.<br>
+                • Les carte se joue une par une en même temps.<br>
+                • Utiliser les effets des carte pour faire des combo génial<br>
+                • Marquez des points en éliminant les cartes adverses !
+            </p>
+        </div>
+
+        <!-- Zone 2 : Nouvelles Infos -->
+        <div class="menu-info" style="background: #1a1a24; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #ff9800; text-align: left;">
+            <h3 style="margin-top: 0; color: #ff9800;">Dernières Infos</h3>
+            <p style="font-size: 14px; color: #bbb; margin-bottom: 0;">
+                Information : La carte "Ben'Vini" est temporairement injouable.
+            </p>
+        </div>
         <p id="menu-status"></p>
     </div>
 
@@ -251,6 +269,7 @@
         }
 
         function setupConnection() {
+            document.getElementById('main-menu').style.display = 'none';
             send('PLAYER_INFO', { myName: myUsername });
             showScreen('screen-deck');
             renderDeckBuilder();
