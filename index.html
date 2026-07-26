@@ -83,20 +83,21 @@
 
         <!-- Zone 1 : Règles du TCG -->
         <div class="menu-info" style="background: #1a1a24; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #4e8cff; text-align: left;">
-            <h3 style="margin-top: 0;">Règles du TCG</h3>
+            <h3 style="margin-top: 0;">Règles du Jeu</h3>
             <p style="font-size: 14px; color: #bbb; margin-bottom: 0;">
-                • Créez un deck de 5 cartes.<br>
+                • Créez un deck de 9 cartes.<br>
                 • Les carte se joue une par une en même temps.<br>
                 • Utiliser les effets des carte pour faire des combo génial<br>
+                • Le premier en 5 points Gagne !<br>
                 • Marquez des points en éliminant les cartes adverses !
             </p>
         </div>
 
         <!-- Zone 2 : Nouvelles Infos -->
         <div class="menu-info" style="background: #1a1a24; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #ff9800; text-align: left;">
-            <h3 style="margin-top: 0; color: #ff9800;">Dernières Infos</h3>
+            <h3 style="margin-top: 0; color: #ff9800;">MAJ Infos</h3>
             <p style="font-size: 14px; color: #bbb; margin-bottom: 0;">
-                Information : La carte "Ben'Vini" est temporairement injouable.
+                La carte "Ben'Vini" est temporairement injouable.
             </p>
         </div>
         <p id="menu-status"></p>
@@ -105,7 +106,7 @@
     <!-- PREPARATION DU DECK -->
     <div id="screen-deck" class="screen">
         <h2>Composition du Deck</h2>
-        <p>Sélectionnez exactement 5 cartes puis ajustez leur ordre de passage :</p>
+        <p>Sélectionnez exactement 9 cartes puis ajustez leur ordre de passage :</p>
 
         <div class="deck-builder-section">
             <h3 style="margin-bottom: 5px;">Votre Deck (<span id="deck-count">0</span> / 5 cartes)</h3>
@@ -179,7 +180,7 @@
     <script>
         let cardPool = [];
         let selectedDeck = [];
-        let oppDeckCount = 5;
+        let oppDeckCount = 9;
         let myScore = 0;
         let oppScore = 0;
         let peer, conn;
@@ -511,11 +512,11 @@
             });
 
             document.getElementById('deck-count').innerText = selectedDeck.length;
-            document.getElementById('btn-ready').disabled = selectedDeck.length !== 5 || myReady;
+            document.getElementById('btn-ready').disabled = selectedDeck.length !== 9 || myReady;
         }
 
         function addToDeck(cardId) {
-            if (myReady || selectedDeck.length >= 5) return;
+            if (myReady || selectedDeck.length >= 9) return;
             const card = cardPool.find(c => c.id === cardId);
             if (card) {
                 selectedDeck.push(JSON.parse(JSON.stringify(card)));
@@ -540,7 +541,7 @@
         }
 
         function playerReady() {
-            if (selectedDeck.length !== 5) return;
+            if (selectedDeck.length !== 9) return;
             myReady = true;
             document.getElementById('btn-ready').disabled = true;
             document.getElementById('deck-status').innerText = "Deck verrouillé. En attente de l'adversaire...";
@@ -1085,13 +1086,13 @@
             const oppDeckEmpty = oppDeckCount === 0 && !currentOppCard;
 
             // --- FENÊTRE DE FIN DE PARTIE ---
-            if ((myScore >= 3 && oppScore >= 3) || (myDeckEmpty && oppDeckEmpty && myScore === oppScore)) {
+            if ((myScore >= 3 && oppScore >= 5) || (myDeckEmpty && oppDeckEmpty && myScore === oppScore)) {
                 showEndGameModal("ÉGALITÉ !", "Les deux joueurs se sont neutralisés !");
             } 
-            else if (myScore >= 3 || (oppDeckEmpty && myScore > oppScore)) {
+            else if (myScore >= 5 || (oppDeckEmpty && myScore > oppScore)) {
                 showEndGameModal("VICTOIRE !", "Félicitations, vous avez remporté le combat !");
             } 
-            else if (oppScore >= 3 || (myDeckEmpty && myScore < oppScore)) {
+            else if (oppScore >= 5 || (myDeckEmpty && myScore < oppScore)) {
                 showEndGameModal("DÉFAITE", "Vous avez perdu cette bataille.");
             }
         }
@@ -1215,6 +1216,7 @@
         }
         // --- FONCTIONS D'AFFICHAGE ET REDIRECTION ---
         function showEndGameModal(title, message) {
+            document.getElementById('screen-game').style.display = 'none';
             document.getElementById('end-game-title').innerText = title;
             document.getElementById('end-game-message').innerText = message;
             document.getElementById('end-game-modal').style.display = 'flex';
