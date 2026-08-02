@@ -109,7 +109,7 @@
         <p>Sélectionnez exactement 9 cartes puis ajustez leur ordre de passage :</p>
 
         <div class="deck-builder-section">
-            <h3 style="margin-bottom: 5px;">Votre Deck (<span id="deck-count">0</span> / 5 cartes)</h3>
+            <h3 style="margin-bottom: 5px;">Votre Deck (<span id="deck-count">0</span> / 9 cartes)</h3>
             <div id="my-deck-container" class="cards-list"></div>
         </div>
 
@@ -517,11 +517,20 @@
 
         function addToDeck(cardId) {
             if (myReady || selectedDeck.length >= 9) return;
+            
             const card = cardPool.find(c => c.id === cardId);
-            if (card) {
-                selectedDeck.push(JSON.parse(JSON.stringify(card)));
-                renderDeckBuilder();
+            if (!card) return;
+
+            // --- NOUVELLE RÈGLE : Maximum 2 cartes avec le même nom ---
+            const countSameName = selectedDeck.filter(c => c.name === card.name).length;
+            if (countSameName >= 2) {
+                alert(`Vous ne pouvez pas ajouter plus de 2 cartes nommées "${card.name}" dans votre deck !`);
+                return;
             }
+            // -----------------------------------------------------------
+
+            selectedDeck.push(JSON.parse(JSON.stringify(card)));
+            renderDeckBuilder();
         }
 
         function removeFromDeck(index) {
@@ -844,8 +853,36 @@
         function resolveCombat() {
             log(`⚔️ <b>${currentMyCard.name}</b> s'attaque à <b>${currentOppCard.name}</b> !`);
 
+            // --- NOUVELLE RÈGLE : Cartes identiques simultanées ---
+            if (currentMyCard.effect === currentOppCard.effect) {
+                log(`🚫 <b>Miroir !</b> Deux cartes aux effets identiques sont jouées en même temps : leurs effets sont annulés !`);
+                
+                // On désactive les effets des deux cartes pour ce combat
+                if (currentMyCard.effect) currentMyCard.effect.type = "NONE";
+                if (currentOppCard.effect) currentOppCard.effect.type = "NONE";
+            }
+            // -----------------------------------------------------
+
             const myPrio = currentMyCard.effect ? currentMyCard.effect.priority : 1;
             const oppPrio = currentOppCard.effect ? currentOppCard.effect.priority : 1;
+
+            if (!currentMyCard.hasTriggeredEffect) {
+                applyCardEffect(currentMyCard, true);
+                currentMyCard.hasTriggeredEffect = true; // Verrouillé pour la suite
+            }
+
+            // Si la carte adverse n'a pas encore déclenché son effet, on l'applique
+            if (!currentOppCard.hasTriggeredEffect) {
+                applyCardEffect(currentOppCard, false);
+                currentOppCard.hasTriggeredEffect = true; // Verrouillé pour la suite
+            }
+
+            // --- NOUVELLE RÈGLE : Double 0 ATK ---
+            if (currentMyCard.atk === 0 && currentOppCard.atk === 0) {
+                log(`⚔️ <b>Impasse !</b> Les deux cartes ont 0 ATK. Elles reçoivent temporairement +1 ATK pour combattre !`);
+                currentMyCard.atk += 1;
+                currentOppCard.atk += 1;
+            }
 
             // Phase de déclenchement des effets (priorité 1 -> 2 -> 3)
             if (myPrio < oppPrio) {
